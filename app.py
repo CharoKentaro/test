@@ -4,11 +4,13 @@ from google.cloud import vision
 import google.generativeai as genai
 from streamlit_local_storage import LocalStorage
 import json
+from PIL import Image, ImageOps
+import io
 
 # --- ① アプリの基本設定 ---
 st.set_page_config(
-    page_title="レシートデータ化くん (真・最終形態)",
-    page_icon="🙏"
+    page_title="レシートデータ化くん (一点突破・最終決戦)",
+    page_icon="🔥"
 )
 
 # --- ② ローカルストレージの準備 ---
@@ -18,7 +20,7 @@ except Exception as e:
     st.error(f"🚨 重大なエラー：ローカルストレージの初期化に失敗しました。エラー詳細: {e}")
     st.stop()
 
-# --- ③ Geminiに渡す、魂のプロンプト（超進化版）---
+# --- ③ Geminiに渡す、魂のプロンプト（変更なし）---
 GEMINI_PROMPT = """
 あなたは、OCRで読み取られたレシートのテキストデータを解析し、構造化する、世界最高の経理AIです。
 これから渡されるテキストは、レシートをOCRで読み取った「生のテキスト」です。改行や誤字が含まれる可能性があります。
@@ -50,11 +52,14 @@ GEMINI_PROMPT = """
 """
 
 # --- ④ メインの処理を実行する関数 ---
-def run_final_app(vision_api_key, gemini_api_key):
-    st.title("🙏 レシートデータ化くん")
-    st.subheader("【真・最終形態】")
+def run_final_battle_app(vision_api_key, gemini_api_key):
+    st.title("🔥 レシートデータ化くん")
+    st.subheader("【一点突破・最終決戦仕様】")
 
-    uploaded_file = st.file_uploader("処理したいレシート画像を、ここにアップロードしてください。", type=['png', 'jpg', 'jpeg'])
+    uploaded_file = st.file_uploader(
+        "処理したいレシート画像を、ここにアップロードしてください。", 
+        type=['png', 'jpg', 'jpeg']
+    )
 
     if st.button("⬆️ このレシートを解析する"):
         if not all([uploaded_file, vision_api_key, gemini_api_key]):
@@ -62,18 +67,33 @@ def run_final_app(vision_api_key, gemini_api_key):
             st.stop()
 
         try:
-            # STEP 1: Vision API（目）が、安価に、生テキストを抽出
-            with st.spinner("STEP 1/2: AI（目）がレシートを読んでいます..."):
+            # ★★★ ここが、最後の、希望 ★★★
+            # STEP 0: 人間の知恵（Python）で、AIのために、最高のお膳立てをする
+            with st.spinner("STEP 0/3: AIのために、画像を最高の状態に処理しています..."):
+                image = Image.open(uploaded_file).convert('L') # グレースケール化
+                # 白黒二値化の閾値。128を基準に調整する可能性がある
+                threshold = 128
+                image = image.point(lambda x: 0 if x < threshold else 255, '1')
+                
+                # Streamlitで表示するために、画像を保存
+                st.image(image, caption="AIが読み取る、白黒二値化された画像", width=300)
+
+                # APIに渡すために、画像をバイトデータに変換
+                buf = io.BytesIO()
+                image.save(buf, format='PNG')
+                processed_image_bytes = buf.getvalue()
+
+            # STEP 1: Vision API（目）が、お膳立てされた画像を、読む
+            with st.spinner("STEP 1/3: AI（目）が、お膳立てされた画像を読んでいます..."):
                 client_options = ClientOptions(api_key=vision_api_key)
                 client = vision.ImageAnnotatorClient(client_options=client_options)
-                content = uploaded_file.getvalue()
-                image = vision.Image(content=content)
-                response = client.text_detection(image=image)
+                vision_image = vision.Image(content=processed_image_bytes)
+                response = client.text_detection(image=vision_image)
                 raw_text = response.text_annotations[0].description if response.text_annotations else ""
                 if response.error.message: st.error(f"Vision APIエラー: {response.error.message}"); st.stop()
             
-            # STEP 2: Gemini（頭脳）が、全ての生テキストを元に、最終判断
-            with st.spinner("STEP 2/2: AI（頭脳）が内容を深く理解し、結論を出しています..."):
+            # STEP 2: Gemini（頭脳）が、最終判断
+            with st.spinner("STEP 2/3: AI（頭脳）が、最終結論を出しています..."):
                 genai.configure(api_key=gemini_api_key)
                 model = genai.GenerativeModel('gemini-1.5-flash')
                 gemini_response = model.generate_content([GEMINI_PROMPT, "---レシート生テキスト---", raw_text])
@@ -82,7 +102,7 @@ def run_final_app(vision_api_key, gemini_api_key):
 
             st.success("🎉 解析が完了しました！")
             st.divider()
-
+            
             # 結果表示
             st.text_input("店名", value=extracted_data.get("store_name", "不明"))
             st.text_input("日付", value=extracted_data.get("purchase_date", "不明"))
@@ -102,10 +122,25 @@ def run_final_app(vision_api_key, gemini_api_key):
 # --- ⑤ サイドバーと、APIキー入力 ---
 with st.sidebar:
     st.header("⚙️ API設定")
-    saved_vision_key = localS.getItem("vision_api_key"); vision_api_key_input = st.text_input("1. Vision APIキー（目）", type="password", value=saved_vision_key if isinstance(saved_vision_key, str) else "")
-    if st.button("Visionキーを記憶"): localS.setItem("vision_api_key", vision_api_key_input); st.success("Vision APIキーを記憶しました！")
-    saved_gemini_key = localS.getItem("gemini_api_key"); gemini_api_key_input = st.text_input("2. Gemini APIキー（頭脳）", type="password", value=saved_gemini_key if isinstance(saved_gemini_key, str) else "")
-    if st.button("Geminiキーを記憶"): localS.setItem("gemini_api_key", gemini_api_key_input); st.success("Gemini APIキーを記憶しました！")
+    saved_vision_key = localS.getItem("vision_api_key")
+    vision_api_key_input = st.text_input(
+        "1. Vision APIキー（目）", 
+        type="password", 
+        value=saved_vision_key if isinstance(saved_vision_key, str) else ""
+    )
+    if st.button("Visionキーを記憶"):
+        localS.setItem("vision_api_key", vision_api_key_input)
+        st.success("Vision APIキーを記憶しました！")
+
+    saved_gemini_key = localS.getItem("gemini_api_key")
+    gemini_api_key_input = st.text_input(
+        "2. Gemini APIキー（頭脳）", 
+        type="password", 
+        value=saved_gemini_key if isinstance(saved_gemini_key, str) else ""
+    )
+    if st.button("Geminiキーを記憶"):
+        localS.setItem("gemini_api_key", gemini_api_key_input)
+        st.success("Gemini APIキーを記憶しました！")
 
 # --- ⑥ メイン処理の、実行 ---
-run_final_app(vision_api_key_input, gemini_api_key_input)
+run_final_battle_app(vision_api_key_input, gemini_api_key_input)

@@ -1,45 +1,236 @@
 import streamlit as st
+import google.generativeai as genai
+from streamlit_local_storage import LocalStorage
+import json
 from PIL import Image
-import pytesseract
-import re
 import io
 
-# （ローカル環境の方は以下のようにパスを設定）
-# pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+# --- ① アプリの基本設定 ---
+st.set_page_config(
+    page_title="お小遣いレコーダー",
+    page_icon="💰"
+)
 
-st.title("🧾 レシートOCR：使った金額を自動で読み取る")
+# --- ② ローカルストレージの準備 ---
+try:
+    localS = LocalStorage()
+except Exception as e:
+    st.error(f"🚨 重大なエラー：ローカルストレージの初期化に失敗しました。エラー詳細: {e}")
+    st.stop()
 
-# --- 画像アップロード ---
-uploaded_file = st.file_uploader("📷 レシート画像をアップロードしてください", type=["jpg", "jpeg", "png"])
+# --- ③ Geminiに渡す、魂のプロンプト（シンプル版）---
+GEMINI_PROMPT = """
+あなたは、レシートの画像を直接解析する、経理アシスタントAIです。
+# 指示
+レシートの画像の中から、「合計金額」「お預り金額」「お釣り」の3つの、支出に関わる重要な数字だけを、注意深く、抽出してください。
+# 出力形式
+*   抽出した結果を、必ず以下のJSON形式で出力してください。
+*   数値は、数字のみを抽出してください（円やカンマは不要）。
+*   値が見つからない場合は、"0" と記載してください。
+*   JSON以外の、前置きや説明は、絶対に出力しないでください。
 
-# --- 金額手入力（OCRの失敗に備えて） ---
-manual_amount = st.number_input("💰 手入力で金額を追加したい場合はこちらに入力", min_value=0, step=1)
+{
+  "total_amount": "ここに合計金額の数値",
+  "tendered_amount": "ここにお預り金額の数値",
+  "change_amount": "ここにお釣り金額の数値"
+}
+"""
 
-# --- OCR処理と金額抽出 ---
-if uploaded_file is not None:
-    try:
-        image = Image.open(uploaded_file)
-        st.image(image, caption="アップロードされたレシート", use_column_width=True)
+# --- ④ 残高計算関数 ---
+def calculate_remaining_balance(monthly_allowance, total_spent):
+    return monthly_allowance - total_spent
 
-        # OCRでテキスト抽出（日本語指定）
-        text = pytesseract.image_to_string(image, lang='jpn')
-        st.text_area("📝 認識されたテキスト", text, height=200)
+def format_balance_display(balance):
+    if balance >= 0:
+        return f"🟢 **{balance:,.0f} 円**"
+    else:
+        return f"🔴 **{abs(balance):,.0f} 円 (予算オーバー)**"
 
-        # 金額の抽出（例：123円、1,234など）
-        prices = re.findall(r'\d{1,3}(?:,\d{3})*|\d+', text)
-        prices = [int(p.replace(',', '')) for p in prices if int(p.replace(',', '')) < 100000]
+# --- ⑤ メインの処理を実行する関数 ---
+def run_allowance_recorder_app(gemini_api_key):
+    st.title("💰 お小遣いレコーダー")
+    st.info("レシートを登録して、今月使えるお金を管理しよう！")
+    
+    # --- セッションステートの初期化（毎回ローカルストレージから最新値を読み込み） ---
+    # ローカルストレージから最新の値を取得
+    stored_allowance = localS.getItem("monthly_allowance")
+    stored_spent = localS.getItem("total_spent")
+    
+    # セッションステートを最新値で更新
+    st.session_state.monthly_allowance = float(stored_allowance if stored_allowance is not None else 0.0)
+    st.session_state.total_spent = float(stored_spent if stored_spent is not None else 0.0)
+    
+    # --- 今月のお小遣い設定 ---
+    st.divider()
+    st.header("💳 今月のお小遣い設定")
+    
+    new_allowance = st.number_input(
+        "今月のお小遣いを入力してください", 
+        value=st.session_state.monthly_allowance,
+        step=1000.0,
+        min_value=0.0
+    )
+    
+    if st.button("この金額で設定する"):
+        st.session_state.monthly_allowance = new_allowance
+        localS.setItem("monthly_allowance", new_allowance)
+        st.success(f"今月のお小遣いを {new_allowance:,.0f} 円に設定しました！")
+        # 即座に画面を更新
+        st.rerun()
 
-        if prices:
-            detected_total = max(prices)
-            total_spent = detected_total + manual_amount
-            st.success(f"✅ OCRで検出された最大の金額: {detected_total:,} 円")
-            st.info(f"💵 合計（手入力含む）: {total_spent:,} 円")
-        else:
-            st.warning("❗金額が検出されませんでした。手入力欄をご利用ください。")
+    # --- 現在の残高表示（メインの見せ場） ---
+    # セッションステートから最新の値を強制的に再取得
+    current_allowance = st.session_state.monthly_allowance
+    current_spent = st.session_state.total_spent
+    remaining_balance = calculate_remaining_balance(current_allowance, current_spent)
+    
+    st.divider()
+    st.header("📊 現在の状況")
+    
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("今月の予算", f"{current_allowance:,.0f} 円")
+    with col2:
+        # 支出がある場合はデルタ表示
+        spent_delta = f"+{current_spent:,.0f} 円" if current_spent > 0 else None
+        st.metric("使った金額", f"{current_spent:,.0f} 円", delta=spent_delta, delta_color="inverse")
+    with col3:
+        # 残高のデルタ（予算からどれだけ減ったか）
+        balance_delta = f"-{current_spent:,.0f} 円" if current_spent > 0 else None
+        st.metric("残り予算", f"{remaining_balance:,.0f} 円", delta=balance_delta, delta_color="inverse")
+    
+    # 大きく目立つ残高表示
+    st.markdown("### 🎯 今使える自由なお金")
+    st.markdown(f"## {format_balance_display(remaining_balance)}")
+    
+    # プログレスバーで視覚的に表示
+    if current_allowance > 0:
+        progress_ratio = min(current_spent / current_allowance, 1.0)
+        st.progress(progress_ratio)
+        st.caption(f"予算使用率: {progress_ratio * 100:.1f}% ({current_spent:,.0f} 円 / {current_allowance:,.0f} 円)")
+    
+    # 支出がある場合の詳細表示
+    if current_spent > 0:
+        st.info(f"💡 これまでに {current_spent:,.0f} 円使いました。残り {remaining_balance:,.0f} 円使えます！")
 
-    except Exception as e:
-        st.error(f"⚠️ エラーが発生しました：{e}")
+    st.divider()
 
-else:
-    st.write("👆 レシート画像をアップロードしてください。")
+    # --- レシート解析機能 ---
+    st.header("📸 レシートを登録する")
+    uploaded_file = st.file_uploader("処理したいレシート画像を、ここにアップロードしてください。", type=['png', 'jpg', 'jpeg'])
 
+    # アップロードされた画像のプレビュー
+    if uploaded_file:
+        st.image(uploaded_file, caption="アップロードされたレシート", width=300)
+
+    if st.button("⬆️ このレシートを解析して支出を記録する"):
+        if not all([uploaded_file, gemini_api_key]):
+            st.warning("画像と、Gemini APIキーが設定されているか確認してください。")
+            st.stop()
+
+        try:
+            with st.spinner("🧠 AIがレシートを解析中..."):
+                genai.configure(api_key=gemini_api_key)
+                model = genai.GenerativeModel('gemini-1.5-flash-latest')
+                image = Image.open(uploaded_file)
+                gemini_response = model.generate_content([GEMINI_PROMPT, image])
+                cleaned_json_str = gemini_response.text.strip().replace("```json", "").replace("```", "")
+                extracted_data = json.loads(cleaned_json_str)
+            
+            st.success("🎉 AIによる解析が完了しました！")
+            
+            # --- 解析結果の表示と確認 ---
+            try:
+                total_amount = float(extracted_data.get("total_amount", 0))
+                
+                st.subheader("📋 解析結果")
+                st.json(extracted_data)
+                
+                # ユーザーが確認・修正できる入力欄
+                corrected_total = st.number_input(
+                    "AIが読み取った合計金額はこちらです。必要なら修正してください。", 
+                    value=total_amount,
+                    min_value=0.0
+                )
+                
+                # 支出後の予想残高を表示
+                projected_balance = calculate_remaining_balance(current_allowance, 
+                                                             current_spent + corrected_total)
+                st.info(f"この支出を記録すると、残り予算は **{projected_balance:,.0f} 円** になります。")
+                
+                if st.button("💰 この金額で支出を確定する"):
+                    # 支出を累積に追加
+                    new_total_spent = st.session_state.total_spent + corrected_total
+                    st.session_state.total_spent = new_total_spent
+                    localS.setItem("total_spent", new_total_spent)
+                    
+                    # 最新の残高を計算
+                    updated_balance = calculate_remaining_balance(st.session_state.monthly_allowance, new_total_spent)
+                    
+                    st.success(f"🎉 {corrected_total:,.0f} 円の支出を記録しました！")
+                    st.markdown(f"### 💳 更新後の状況")
+                    st.markdown(f"- **使った金額**: {new_total_spent:,.0f} 円")
+                    st.markdown(f"- **残り予算**: {format_balance_display(updated_balance)}")
+                    st.balloons()
+                    
+                    # 画面を即座に更新
+                    st.rerun()
+
+            except (ValueError, TypeError) as e:
+                st.error(f"AIが金額を数値として正しく認識できませんでした。エラー: {e}")
+                
+                st.subheader("手動入力")
+                manual_total = st.number_input("支出した合計金額を手動で入力してください。", min_value=0.0)
+                
+                if st.button("手動で支出を記録する") and manual_total > 0:
+                    new_total_spent = st.session_state.total_spent + manual_total
+                    st.session_state.total_spent = new_total_spent
+                    localS.setItem("total_spent", new_total_spent)
+                    st.success(f"🎉 {manual_total:,.0f} 円の支出を記録しました！")
+                    st.rerun()
+
+        except Exception as e:
+            st.error(f"❌ 処理中に予期せぬエラーが発生しました: {e}")
+    
+    # --- 支出履歴のリセット機能 ---
+    st.divider()
+    st.header("🔄 データ管理")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("支出履歴をリセット", type="secondary"):
+            st.session_state.total_spent = 0.0
+            localS.setItem("total_spent", 0.0)
+            st.success("支出履歴をリセットしました！")
+            st.rerun()
+    
+    with col2:
+        if st.button("全データをリセット", type="secondary"):
+            st.session_state.monthly_allowance = 0.0
+            st.session_state.total_spent = 0.0
+            localS.setItem("monthly_allowance", 0.0)
+            localS.setItem("total_spent", 0.0)
+            st.success("全データをリセットしました！")
+            st.rerun()
+
+# --- ⑥ サイドバーと、APIキー入力 ---
+with st.sidebar:
+    st.header("⚙️ API設定")
+    saved_gemini_key = localS.getItem("gemini_api_key")
+    gemini_api_key_input = st.text_input(
+        "Gemini APIキー", type="password",
+        value=saved_gemini_key if isinstance(saved_gemini_key, str) else ""
+    )
+    if st.button("Geminiキーを記憶"):
+        localS.setItem("gemini_api_key", gemini_api_key_input)
+        st.success("Gemini APIキーを記憶しました！")
+    
+    st.divider()
+    st.caption("💡 使い方のヒント")
+    st.caption("1. 今月の予算を設定")
+    st.caption("2. レシート画像をアップロード") 
+    st.caption("3. AI解析結果を確認して支出記録")
+    st.caption("4. 残り予算をリアルタイムで確認")
+
+# --- ⑦ メイン処理の、実行 ---
+run_allowance_recorder_app(gemini_api_key_input)

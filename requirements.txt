@@ -2,3 +2,4 @@ streamlit
 streamlit-local-storage
 google-cloud-vision
 google-generativeai
+Pillow

@@ -36,35 +36,79 @@ GEMINI_PROMPT = """
 }
 """
 
-# --- ④ メインの処理を実行する関数 ---
+# --- ④ 残高計算関数 ---
+def calculate_remaining_balance(monthly_allowance, total_spent):
+    return monthly_allowance - total_spent
+
+def format_balance_display(balance):
+    if balance >= 0:
+        return f"🟢 **{balance:,.0f} 円**"
+    else:
+        return f"🔴 **{abs(balance):,.0f} 円 (予算オーバー)**"
+
+# --- ⑤ メインの処理を実行する関数 ---
 def run_allowance_recorder_app(gemini_api_key):
     st.title("💰 お小遣いレコーダー")
     st.info("レシートを登録して、今月使えるお金を管理しよう！")
     
-    # --- ★★★ ここが、魂の、新機能 ★★★ ---
-    st.divider()
-    st.header("今月のお小遣い設定")
-    
-    # セッションステートの初期化
+    # --- セッションステートの初期化 ---
     if 'monthly_allowance' not in st.session_state:
         st.session_state.monthly_allowance = float(localS.getItem("monthly_allowance") or 0.0)
+    
+    if 'total_spent' not in st.session_state:
+        st.session_state.total_spent = float(localS.getItem("total_spent") or 0.0)
+    
+    # --- 今月のお小遣い設定 ---
+    st.divider()
+    st.header("💳 今月のお小遣い設定")
     
     new_allowance = st.number_input(
         "今月のお小遣いを入力してください", 
         value=st.session_state.monthly_allowance,
-        step=1000.0
+        step=1000.0,
+        min_value=0.0
     )
+    
     if st.button("この金額で設定する"):
         st.session_state.monthly_allowance = new_allowance
         localS.setItem("monthly_allowance", new_allowance)
         st.success(f"今月のお小遣いを {new_allowance:,.0f} 円に設定しました！")
+        st.rerun()
 
-    st.header(f"今、自由に使えるお金： {st.session_state.monthly_allowance:,.0f} 円")
+    # --- 現在の残高表示（メインの見せ場） ---
+    remaining_balance = calculate_remaining_balance(st.session_state.monthly_allowance, st.session_state.total_spent)
+    
+    st.divider()
+    st.header("📊 現在の状況")
+    
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("今月の予算", f"{st.session_state.monthly_allowance:,.0f} 円")
+    with col2:
+        st.metric("使った金額", f"{st.session_state.total_spent:,.0f} 円")
+    with col3:
+        st.metric("残り予算", f"{remaining_balance:,.0f} 円", 
+                 delta=f"{remaining_balance - st.session_state.monthly_allowance:,.0f} 円" if st.session_state.total_spent > 0 else None)
+    
+    # 大きく目立つ残高表示
+    st.markdown("### 🎯 今使える自由なお金")
+    st.markdown(f"## {format_balance_display(remaining_balance)}")
+    
+    # プログレスバーで視覚的に表示
+    if st.session_state.monthly_allowance > 0:
+        progress_ratio = min(st.session_state.total_spent / st.session_state.monthly_allowance, 1.0)
+        st.progress(progress_ratio)
+        st.caption(f"予算使用率: {progress_ratio * 100:.1f}%")
+
     st.divider()
 
     # --- レシート解析機能 ---
-    st.header("レシートを登録する")
+    st.header("📸 レシートを登録する")
     uploaded_file = st.file_uploader("処理したいレシート画像を、ここにアップロードしてください。", type=['png', 'jpg', 'jpeg'])
+
+    # アップロードされた画像のプレビュー
+    if uploaded_file:
+        st.image(uploaded_file, caption="アップロードされたレシート", width=300)
 
     if st.button("⬆️ このレシートを解析して支出を記録する"):
         if not all([uploaded_file, gemini_api_key]):
@@ -82,34 +126,77 @@ def run_allowance_recorder_app(gemini_api_key):
             
             st.success("🎉 AIによる解析が完了しました！")
             
-            # --- 支出の反映 ---
+            # --- 解析結果の表示と確認 ---
             try:
                 total_amount = float(extracted_data.get("total_amount", 0))
                 
-                # ユーザーが確認・修正できる入力欄
-                corrected_total = st.number_input("AIが読み取った合計金額はこちらです。必要なら修正してください。", value=total_amount)
+                st.subheader("📋 解析結果")
+                st.json(extracted_data)
                 
-                if st.button("この金額で支出を確定する"):
-                    st.session_state.monthly_allowance -= corrected_total
-                    localS.setItem("monthly_allowance", st.session_state.monthly_allowance)
-                    st.success(f"{corrected_total:,.0f} 円の支出を記録しました！")
+                # ユーザーが確認・修正できる入力欄
+                corrected_total = st.number_input(
+                    "AIが読み取った合計金額はこちらです。必要なら修正してください。", 
+                    value=total_amount,
+                    min_value=0.0
+                )
+                
+                # 支出後の予想残高を表示
+                projected_balance = calculate_remaining_balance(st.session_state.monthly_allowance, 
+                                                             st.session_state.total_spent + corrected_total)
+                st.info(f"この支出を記録すると、残り予算は **{projected_balance:,.0f} 円** になります。")
+                
+                if st.button("💰 この金額で支出を確定する"):
+                    # 支出を累積に追加
+                    st.session_state.total_spent += corrected_total
+                    localS.setItem("total_spent", st.session_state.total_spent)
+                    
+                    st.success(f"🎉 {corrected_total:,.0f} 円の支出を記録しました！")
                     st.balloons()
+                    
+                    # 最新の残高を表示
+                    new_balance = calculate_remaining_balance(st.session_state.monthly_allowance, st.session_state.total_spent)
+                    st.markdown(f"### 💳 更新後の残り予算: {format_balance_display(new_balance)}")
+                    
                     # ページをリフレッシュして最新の残高を反映
                     st.rerun()
 
-            except (ValueError, TypeError):
-                st.error("AIが金額を数値として正しく認識できませんでした。手動で入力してください。")
-                if st.button("手動で支出を記録する"):
-                    manual_total = st.number_input("支出した合計金額を手動で入力してください。")
-                    st.session_state.monthly_allowance -= manual_total
-                    localS.setItem("monthly_allowance", st.session_state.monthly_allowance)
-                    st.success(f"{manual_total:,.0f} 円の支出を記録しました！")
+            except (ValueError, TypeError) as e:
+                st.error(f"AIが金額を数値として正しく認識できませんでした。エラー: {e}")
+                
+                st.subheader("手動入力")
+                manual_total = st.number_input("支出した合計金額を手動で入力してください。", min_value=0.0)
+                
+                if st.button("手動で支出を記録する") and manual_total > 0:
+                    st.session_state.total_spent += manual_total
+                    localS.setItem("total_spent", st.session_state.total_spent)
+                    st.success(f"🎉 {manual_total:,.0f} 円の支出を記録しました！")
                     st.rerun()
 
         except Exception as e:
             st.error(f"❌ 処理中に予期せぬエラーが発生しました: {e}")
+    
+    # --- 支出履歴のリセット機能 ---
+    st.divider()
+    st.header("🔄 データ管理")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("支出履歴をリセット", type="secondary"):
+            st.session_state.total_spent = 0.0
+            localS.setItem("total_spent", 0.0)
+            st.success("支出履歴をリセットしました！")
+            st.rerun()
+    
+    with col2:
+        if st.button("全データをリセット", type="secondary"):
+            st.session_state.monthly_allowance = 0.0
+            st.session_state.total_spent = 0.0
+            localS.setItem("monthly_allowance", 0.0)
+            localS.setItem("total_spent", 0.0)
+            st.success("全データをリセットしました！")
+            st.rerun()
 
-# --- ⑤ サイドバーと、APIキー入力 ---
+# --- ⑥ サイドバーと、APIキー入力 ---
 with st.sidebar:
     st.header("⚙️ API設定")
     saved_gemini_key = localS.getItem("gemini_api_key")
@@ -120,6 +207,13 @@ with st.sidebar:
     if st.button("Geminiキーを記憶"):
         localS.setItem("gemini_api_key", gemini_api_key_input)
         st.success("Gemini APIキーを記憶しました！")
+    
+    st.divider()
+    st.caption("💡 使い方のヒント")
+    st.caption("1. 今月の予算を設定")
+    st.caption("2. レシート画像をアップロード") 
+    st.caption("3. AI解析結果を確認して支出記録")
+    st.caption("4. 残り予算をリアルタイムで確認")
 
-# --- ⑥ メイン処理の、実行 ---
+# --- ⑦ メイン処理の、実行 ---
 run_allowance_recorder_app(gemini_api_key_input)

@@ -1,118 +1,43 @@
 import streamlit as st
-import json
-import os
-from datetime import datetime
+import re
+from PIL import Image
+import pytesseract
 
-# JSONファイルの保存先
-DATA_FILE = "budget_data.json"
+# セッションステートの初期化
+if "budget" not in st.session_state:
+    st.session_state.budget = 1000  # 初期予算
+if "spent" not in st.session_state:
+    st.session_state.spent = 0
 
-# =======================================
-# 1. データの読み込み・初期化
-# =======================================
-def load_data():
-    if os.path.exists(DATA_FILE):
-        with open(DATA_FILE, "r") as f:
-            return json.load(f)
-    else:
-        return {
-            "budget": 1000,  # 初期予算
-            "expenses": [],  # 支出リスト
-        }
+st.title("📸 レシート家計簿")
 
-def save_data(data):
-    with open(DATA_FILE, "w") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
+# レシート画像のアップロード
+uploaded_file = st.file_uploader("🧾 レシート画像をアップロード", type=["jpg", "jpeg", "png"])
+if uploaded_file:
+    image = Image.open(uploaded_file)
+    st.image(image, caption="アップロードされたレシート", use_column_width=True)
 
-# =======================================
-# 2. 残り予算の計算
-# =======================================
-def calculate_summary(data):
-    total_spent = sum(item["amount"] for item in data["expenses"])
-    remaining = data["budget"] - total_spent
-    usage_rate = (total_spent / data["budget"]) * 100 if data["budget"] else 0
-    return total_spent, remaining, usage_rate
+    # OCR処理
+    text = pytesseract.image_to_string(image, lang='jpn')
+    st.text_area("🔍 抽出されたテキスト", text, height=200)
 
-# =======================================
-# 3. UI構成
-# =======================================
-st.set_page_config("かんたん家計簿💰", layout="centered")
+    # 金額の抽出（全角・半角の「円」や￥対応）
+    amounts = re.findall(r"[¥￥]?\s?(\d{1,5})(?:円)?", text)
+    if amounts:
+        extracted_amounts = list(map(int, amounts))
+        total_amount = sum(extracted_amounts)
 
-st.title("かんたん家計簿 💰")
-st.markdown("今月の支出を記録して、予算内での生活をサポートします。")
+        if st.button("✅ この金額を支出として記録"):
+            st.session_state.spent += total_amount
+            st.success(f"{total_amount} 円を支出として記録しました！")
 
-# データ読み込み
-data = load_data()
+# 現在の状態を表示
+remaining = st.session_state.budget - st.session_state.spent
+usage_rate = st.session_state.spent / st.session_state.budget * 100 if st.session_state.budget else 0
 
-# =======================================
-# 4. 支出の入力フォーム
-# =======================================
-with st.form("expense_form"):
-    st.subheader("📥 支出を記録する")
-    description = st.text_input("支出の内容", placeholder="例：ランチ")
-    amount = st.number_input("金額（円）", min_value=0, step=100)
-    submitted = st.form_submit_button("記録する")
-
-    if submitted:
-        if description and amount > 0:
-            data["expenses"].append({
-                "description": description,
-                "amount": amount,
-                "date": datetime.now().strftime("%Y-%m-%d %H:%M")
-            })
-            save_data(data)
-            st.success(f"この支出を記録すると、残り予算は {calculate_summary(data)[1]} 円 になります。")
-            st.rerun()
-        else:
-            st.warning("支出内容と金額を正しく入力してください。")
-
-# =======================================
-# 5. 現在の状況表示
-# =======================================
-st.markdown("---")
-st.subheader("📊 現在の状況")
-
-total_spent, remaining, usage_rate = calculate_summary(data)
-
-col1, col2, col3 = st.columns(3)
-col1.metric("今月の予算", f"{data['budget']} 円")
-col2.metric("使った金額", f"{total_spent} 円")
-col3.metric("残り予算", f"{remaining} 円")
-
-# 使用率バー
-st.markdown(f"""
-🎯 **今使える自由なお金**  
-🟢 {remaining} 円  
-予算使用率: {usage_rate:.1f}% ({total_spent} 円 / {data['budget']} 円)
-""")
-
-# =======================================
-# 6. 支出の一覧表示（任意）
-# =======================================
-with st.expander("📜 支出の履歴を表示する"):
-    if data["expenses"]:
-        for item in reversed(data["expenses"]):
-            st.write(f"- {item['date']} | {item['description']}：{item['amount']} 円")
-    else:
-        st.info("まだ支出は記録されていません。")
-
-# =======================================
-# 7. データ管理オプション
-# =======================================
-st.markdown("---")
-st.subheader("🔄 データ管理")
-
-col4, col5 = st.columns(2)
-
-with col4:
-    if st.button("💣 支出をリセット"):
-        data["expenses"] = []
-        save_data(data)
-        st.success("支出履歴をリセットしました。")
-        st.rerun()
-
-with col5:
-    if st.button("🔧 予算を初期化（1,000円に戻す）"):
-        data["budget"] = 1000
-        save_data(data)
-        st.success("予算を1,000円に設定しました。")
-        st.rerun()
+st.markdown("## 📊 現在の状況")
+st.metric("💰 今月の予算", f"{st.session_state.budget} 円")
+st.metric("📉 使った金額", f"{st.session_state.spent} 円")
+st.metric("💸 残り予算", f"{remaining} 円")
+st.metric("🎯 今使える自由なお金", f"🟢 {remaining} 円")
+st.metric("📈 予算使用率", f"{usage_rate:.1f}%")

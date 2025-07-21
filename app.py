@@ -76,29 +76,39 @@ def run_allowance_recorder_app(gemini_api_key):
         st.rerun()
 
     # --- 現在の残高表示（メインの見せ場） ---
-    remaining_balance = calculate_remaining_balance(st.session_state.monthly_allowance, st.session_state.total_spent)
+    # セッションステートから最新の値を強制的に再取得
+    current_allowance = st.session_state.monthly_allowance
+    current_spent = st.session_state.total_spent
+    remaining_balance = calculate_remaining_balance(current_allowance, current_spent)
     
     st.divider()
     st.header("📊 現在の状況")
     
     col1, col2, col3 = st.columns(3)
     with col1:
-        st.metric("今月の予算", f"{st.session_state.monthly_allowance:,.0f} 円")
+        st.metric("今月の予算", f"{current_allowance:,.0f} 円")
     with col2:
-        st.metric("使った金額", f"{st.session_state.total_spent:,.0f} 円")
+        # 支出がある場合はデルタ表示
+        spent_delta = f"+{current_spent:,.0f} 円" if current_spent > 0 else None
+        st.metric("使った金額", f"{current_spent:,.0f} 円", delta=spent_delta, delta_color="inverse")
     with col3:
-        st.metric("残り予算", f"{remaining_balance:,.0f} 円", 
-                 delta=f"{remaining_balance - st.session_state.monthly_allowance:,.0f} 円" if st.session_state.total_spent > 0 else None)
+        # 残高のデルタ（予算からどれだけ減ったか）
+        balance_delta = f"-{current_spent:,.0f} 円" if current_spent > 0 else None
+        st.metric("残り予算", f"{remaining_balance:,.0f} 円", delta=balance_delta, delta_color="inverse")
     
     # 大きく目立つ残高表示
     st.markdown("### 🎯 今使える自由なお金")
     st.markdown(f"## {format_balance_display(remaining_balance)}")
     
     # プログレスバーで視覚的に表示
-    if st.session_state.monthly_allowance > 0:
-        progress_ratio = min(st.session_state.total_spent / st.session_state.monthly_allowance, 1.0)
+    if current_allowance > 0:
+        progress_ratio = min(current_spent / current_allowance, 1.0)
         st.progress(progress_ratio)
-        st.caption(f"予算使用率: {progress_ratio * 100:.1f}%")
+        st.caption(f"予算使用率: {progress_ratio * 100:.1f}% ({current_spent:,.0f} 円 / {current_allowance:,.0f} 円)")
+    
+    # 支出がある場合の詳細表示
+    if current_spent > 0:
+        st.info(f"💡 これまでに {current_spent:,.0f} 円使いました。残り {remaining_balance:,.0f} 円使えます！")
 
     st.divider()
 
@@ -141,8 +151,8 @@ def run_allowance_recorder_app(gemini_api_key):
                 )
                 
                 # 支出後の予想残高を表示
-                projected_balance = calculate_remaining_balance(st.session_state.monthly_allowance, 
-                                                             st.session_state.total_spent + corrected_total)
+                projected_balance = calculate_remaining_balance(current_allowance, 
+                                                             current_spent + corrected_total)
                 st.info(f"この支出を記録すると、残り予算は **{projected_balance:,.0f} 円** になります。")
                 
                 if st.button("💰 この金額で支出を確定する"):
@@ -150,14 +160,18 @@ def run_allowance_recorder_app(gemini_api_key):
                     st.session_state.total_spent += corrected_total
                     localS.setItem("total_spent", st.session_state.total_spent)
                     
+                    # 最新の残高を計算
+                    updated_balance = calculate_remaining_balance(st.session_state.monthly_allowance, st.session_state.total_spent)
+                    
                     st.success(f"🎉 {corrected_total:,.0f} 円の支出を記録しました！")
+                    st.markdown(f"### 💳 更新後の状況")
+                    st.markdown(f"- **使った金額**: {st.session_state.total_spent:,.0f} 円")
+                    st.markdown(f"- **残り予算**: {format_balance_display(updated_balance)}")
                     st.balloons()
                     
-                    # 最新の残高を表示
-                    new_balance = calculate_remaining_balance(st.session_state.monthly_allowance, st.session_state.total_spent)
-                    st.markdown(f"### 💳 更新後の残り予算: {format_balance_display(new_balance)}")
-                    
-                    # ページをリフレッシュして最新の残高を反映
+                    # 少し待ってから自動リフレッシュ
+                    import time
+                    time.sleep(1)
                     st.rerun()
 
             except (ValueError, TypeError) as e:

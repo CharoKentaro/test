@@ -50,13 +50,18 @@ def format_balance_display(balance):
 def run_allowance_recorder_app(gemini_api_key):
     st.title("💰 お小遣いレコーダー")
     st.info("レシートを登録して、今月使えるお金を管理しよう！")
-    
-    # --- セッションステートの初期化（毎回ローカルストレージから最新値を読み込み） ---
-    stored_allowance = localS.getItem("monthly_allowance")
-    stored_spent = localS.getItem("total_spent")
-    
-    st.session_state.monthly_allowance = float(stored_allowance if stored_allowance is not None else 0.0)
-    st.session_state.total_spent = float(stored_spent if stored_spent is not None else 0.0)
+
+    # --- 【修正箇所】セッションステートの初期化処理を改善 ---
+    # アプリの初回実行時、またはブラウザリロード時に一度だけローカルストレージから値を読み込む
+    if "initialized" not in st.session_state:
+        stored_allowance = localS.getItem("monthly_allowance")
+        stored_spent = localS.getItem("total_spent")
+        
+        st.session_state.monthly_allowance = float(stored_allowance if stored_allowance is not None else 0.0)
+        st.session_state.total_spent = float(stored_spent if stored_spent is not None else 0.0)
+        
+        # 初期化が完了したことを示すフラグを立てる
+        st.session_state.initialized = True
     
     # --- 今月のお小遣い設定 ---
     st.divider()
@@ -70,12 +75,14 @@ def run_allowance_recorder_app(gemini_api_key):
     )
     
     if st.button("この金額で設定する"):
+        # 高速な内部メモリを先に更新
         st.session_state.monthly_allowance = new_allowance
+        # その後、バックアップとしてローカルストレージに保存
         localS.setItem("monthly_allowance", new_allowance)
         st.success(f"今月のお小遣いを {new_allowance:,.0f} 円に設定しました！")
         st.rerun()
 
-    # --- 現在の残高表示 ---
+    # --- 現在の残高表示（常に最新の内部メモリを参照） ---
     current_allowance = st.session_state.monthly_allowance
     current_spent = st.session_state.total_spent
     remaining_balance = calculate_remaining_balance(current_allowance, current_spent)
@@ -135,7 +142,6 @@ def run_allowance_recorder_app(gemini_api_key):
                     st.subheader("📋 解析結果")
                     st.json(extracted_data)
                     
-                    # 【修正箇所】.id を 正しい .file_id に変更
                     corrected_total = st.number_input(
                         "AIが読み取った合計金額はこちらです。必要なら修正してください。", 
                         value=total_amount,
@@ -146,24 +152,20 @@ def run_allowance_recorder_app(gemini_api_key):
                     projected_balance = calculate_remaining_balance(current_allowance, current_spent + corrected_total)
                     st.info(f"この支出を記録すると、残り予算は **{projected_balance:,.0f} 円** になります。")
                     
-                    # 【修正箇所】.id を 正しい .file_id に変更
                     if st.button("💰 この金額で支出を確定する", key=f"confirm_button_{uploaded_file.file_id}"):
                         new_total_spent = st.session_state.total_spent + corrected_total
+                        # 高速な内部メモリを先に更新
                         st.session_state.total_spent = new_total_spent
+                        # その後、バックアップとしてローカルストレージに保存
                         localS.setItem("total_spent", new_total_spent)
                         
-                        updated_balance = calculate_remaining_balance(st.session_state.monthly_allowance, new_total_spent)
-                        
                         st.success(f"🎉 {corrected_total:,.0f} 円の支出を記録しました！")
-                        st.markdown(f"### 💳 更新後の状況")
-                        st.markdown(f"- **使った金額**: {new_total_spent:,.0f} 円")
-                        st.markdown(f"- **残り予算**: {format_balance_display(updated_balance)}")
                         st.balloons()
+                        # 画面をリフレッシュして、更新された内部メモリの値を即座に表示
                         st.rerun()
 
                 except (ValueError, TypeError) as e:
                     st.error(f"AIが金額を数値として正しく認識できませんでした。エラー: {e}")
-                    
                     st.subheader("手動入力")
                     manual_total = st.number_input("支出した合計金額を手動で入力してください。", min_value=0.0, key="manual_total")
                     
@@ -176,7 +178,6 @@ def run_allowance_recorder_app(gemini_api_key):
 
             except Exception as e:
                 st.error(f"❌ 処理中に予期せぬエラーが発生しました: {e}")
-                # エラー発生時にAIの生の応答を表示してデバッグしやすくする
                 if 'gemini_response' in locals():
                     st.code(gemini_response.text, language="text")
     
@@ -196,6 +197,7 @@ def run_allowance_recorder_app(gemini_api_key):
         if st.button("全データをリセット", type="secondary"):
             st.session_state.monthly_allowance = 0.0
             st.session_state.total_spent = 0.0
+            st.session_state.initialized = False # 初期化フラグもリセット
             localS.setItem("monthly_allowance", 0.0)
             localS.setItem("total_spent", 0.0)
             st.success("全データをリセットしました！")

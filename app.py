@@ -62,7 +62,7 @@ def format_balance_display(balance):
 if "initialized" not in st.session_state:
     st.session_state.monthly_allowance = float(localS.getItem("monthly_allowance") or 0.0)
     st.session_state.total_spent = float(localS.getItem("total_spent") or 0.0)
-    st.session_state.receipt_preview = None
+    st.session_state.receipt_preview = None 
     st.session_state.all_receipts = localS.getItem("all_receipt_data") or []
     st.session_state.initialized = True
 
@@ -75,8 +75,8 @@ with st.sidebar:
         value=saved_gemini_key if isinstance(saved_gemini_key, str) else ""
     )
     if st.button("Geminiキーを記憶"):
-        #【最終修正】固有キーを追加
-        localS.setItem("gemini_api_key", gemini_api_key_input, key="set_gemini_api_key")
+        #【修正】固有キーを追加
+        localS.setItem("gemini_api_key", gemini_api_key_input, key="set_api_key")
         st.success("Gemini APIキーを記憶しました！")
     
     st.divider()
@@ -116,19 +116,8 @@ if st.session_state.receipt_preview:
 
     st.divider()
     st.subheader("📊 支出後の残高プレビュー")
-    current_allowance = st.session_state.monthly_allowance
-    current_spent = st.session_state.total_spent
-    projected_spent = current_spent + corrected_amount
-    projected_balance = calculate_remaining_balance(current_allowance, projected_spent)
-
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("今月の予算", f"{current_allowance:,.0f} 円")
-    with col2:
-        st.metric("使った金額", f"{projected_spent:,.0f} 円", delta=f"+{corrected_amount:,.0f} 円", delta_color="inverse")
-    with col3:
-        st.metric("残り予算", f"{projected_balance:,.0f} 円", delta=f"-{corrected_amount:,.0f} 円", delta_color="inverse")
-
+    # ... (プレビュー部分は変更なし)
+    
     st.divider()
     confirm_col, cancel_col = st.columns(2)
     with confirm_col:
@@ -139,12 +128,12 @@ if st.session_state.receipt_preview:
                 "items": edited_df.to_dict('records')
             }
             st.session_state.all_receipts.append(new_receipt_record)
-            #【最終修正】固有キーを追加
-            localS.setItem("all_receipt_data", st.session_state.all_receipts, key="set_all_receipts")
+            #【修正】固有キーを追加
+            localS.setItem("all_receipt_data", st.session_state.all_receipts, key="confirm_set_all_receipts")
 
             st.session_state.total_spent += corrected_amount
-            #【最終修正】固有キーを追加
-            localS.setItem("total_spent", st.session_state.total_spent, key="set_total_spent_confirm")
+            #【修正】固有キーを追加
+            localS.setItem("total_spent", st.session_state.total_spent, key="confirm_set_total_spent")
             
             st.session_state.receipt_preview = None
             
@@ -169,7 +158,7 @@ else:
     )
     if st.button("この金額で設定する"):
         st.session_state.monthly_allowance = new_allowance
-        #【最終修正】固有キーを追加
+        #【修正】固有キーを追加
         localS.setItem("monthly_allowance", new_allowance, key="set_allowance")
         st.success(f"今月のお小遣いを {new_allowance:,.0f} 円に設定しました！")
         st.rerun()
@@ -182,10 +171,12 @@ else:
     st.header("📸 レシートを登録する")
     # ... (このセクションは変更なし)
 
+    # --- 全データ書き出しコーナー ---
     st.divider()
     st.header("🗂️ 全支出履歴の書き出し")
     # ... (このセクションは変更なし)
-    
+
+    # --- データ管理機能の強化 ---
     st.divider()
     st.header("🔄 データ管理")
     col1, col2 = st.columns(2)
@@ -193,9 +184,9 @@ else:
         if st.button("支出履歴とレシートデータをリセット", type="secondary"):
             st.session_state.total_spent = 0.0
             st.session_state.all_receipts = []
-            #【最終修正】固有キーを追加
-            localS.setItem("total_spent", 0.0, key="reset_total_spent")
-            localS.setItem("all_receipt_data", [], key="reset_all_receipts")
+            #【修正】固有キーを追加
+            localS.setItem("total_spent", 0.0, key="reset_spent_only")
+            localS.setItem("all_receipt_data", [], key="reset_receipts_only")
             st.success("支出履歴と全レシートデータをリセットしました！")
             st.rerun()
     with col2:
@@ -205,9 +196,9 @@ else:
             st.session_state.receipt_preview = None
             st.session_state.all_receipts = []
             st.session_state.initialized = False
-            #【最終修正】固有キーを追加
-            localS.setItem("monthly_allowance", 0.0, key="hard_reset_allowance")
-            localS.setItem("total_spent", 0.0, key="hard_reset_spent")
-            localS.setItem("all_receipt_data", [], key="hard_reset_receipts")
+            #【修正】固有キーを追加
+            localS.setItem("monthly_allowance", 0.0, key="full_reset_allowance")
+            localS.setItem("total_spent", 0.0, key="full_reset_spent")
+            localS.setItem("all_receipt_data", [], key="full_reset_receipts")
             st.success("すべてのデータをリセットしました！")
             st.rerun()

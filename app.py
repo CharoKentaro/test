@@ -58,15 +58,16 @@ def format_balance_display(balance):
 
 # --- ⑤ メイン処理 ---
 
-# --- セッションステートの初期化 ---
+# --- 【機能追加】セッションステートの初期化に「金庫」を追加 ---
 if "initialized" not in st.session_state:
     st.session_state.monthly_allowance = float(localS.getItem("monthly_allowance") or 0.0)
     st.session_state.total_spent = float(localS.getItem("total_spent") or 0.0)
     st.session_state.receipt_preview = None 
+    # 全レシートデータを格納する「金庫」を準備
     st.session_state.all_receipts = localS.getItem("all_receipt_data") or []
     st.session_state.initialized = True
 
-# --- サイドバー ---
+# --- サイドバー（APIキー設定など）---
 with st.sidebar:
     st.header("⚙️ API設定")
     saved_gemini_key = localS.getItem("gemini_api_key")
@@ -75,12 +76,18 @@ with st.sidebar:
         value=saved_gemini_key if isinstance(saved_gemini_key, str) else ""
     )
     if st.button("Geminiキーを記憶"):
-        #【修正】固有キーを追加
+        #【エラー修正】固有キーを追加
         localS.setItem("gemini_api_key", gemini_api_key_input, key="set_api_key")
         st.success("Gemini APIキーを記憶しました！")
     
     st.divider()
-    st.caption("💡 使い方のヒント...")
+    st.caption("💡 使い方のヒント")
+    st.caption("1. 今月の予算を設定")
+    st.caption("2. レシート画像をアップロード") 
+    st.caption("3. AI解析結果を確認・修正")
+    st.caption("4. 支出を確定＆品目リストを保存")
+    st.caption("5. 全履歴をいつでもダウンロード")
+
 
 # --- メイン画面の描画 ---
 st.title("💰 お小遣いレコーダー")
@@ -116,8 +123,20 @@ if st.session_state.receipt_preview:
 
     st.divider()
     st.subheader("📊 支出後の残高プレビュー")
-    # ... (プレビュー部分は変更なし)
+    current_allowance = st.session_state.monthly_allowance
+    current_spent = st.session_state.total_spent
+    projected_spent = current_spent + corrected_amount
+    projected_balance = calculate_remaining_balance(current_allowance, projected_spent)
+
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("今月の予算", f"{current_allowance:,.0f} 円")
+    with col2:
+        st.metric("使った金額", f"{projected_spent:,.0f} 円", delta=f"+{corrected_amount:,.0f} 円", delta_color="inverse")
+    with col3:
+        st.metric("残り予算", f"{projected_balance:,.0f} 円", delta=f"-{corrected_amount:,.0f} 円", delta_color="inverse")
     
+    # 確定・キャンセルボタン
     st.divider()
     confirm_col, cancel_col = st.columns(2)
     with confirm_col:
@@ -128,12 +147,12 @@ if st.session_state.receipt_preview:
                 "items": edited_df.to_dict('records')
             }
             st.session_state.all_receipts.append(new_receipt_record)
-            #【修正】固有キーを追加
-            localS.setItem("all_receipt_data", st.session_state.all_receipts, key="confirm_set_all_receipts")
+            #【エラー修正】固有キーを追加
+            localS.setItem("all_receipt_data", st.session_state.all_receipts, key="confirm_set_receipts")
 
             st.session_state.total_spent += corrected_amount
-            #【修正】固有キーを追加
-            localS.setItem("total_spent", st.session_state.total_spent, key="confirm_set_total_spent")
+            #【エラー修正】固有キーを追加
+            localS.setItem("total_spent", st.session_state.total_spent, key="confirm_set_total")
             
             st.session_state.receipt_preview = None
             
@@ -158,25 +177,103 @@ else:
     )
     if st.button("この金額で設定する"):
         st.session_state.monthly_allowance = new_allowance
-        #【修正】固有キーを追加
+        #【エラー修正】固有キーを追加
         localS.setItem("monthly_allowance", new_allowance, key="set_allowance")
         st.success(f"今月のお小遣いを {new_allowance:,.0f} 円に設定しました！")
         st.rerun()
 
     st.divider()
     st.header("📊 現在の状況")
-    # ... (このセクションは変更なし)
+    current_allowance = st.session_state.monthly_allowance
+    current_spent = st.session_state.total_spent
+    remaining_balance = calculate_remaining_balance(current_allowance, current_spent)
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("今月の予算", f"{current_allowance:,.0f} 円")
+    with col2:
+        st.metric("使った金額", f"{current_spent:,.0f} 円")
+    with col3:
+        st.metric("残り予算", f"{remaining_balance:,.0f} 円")
+    
+    st.markdown("### 🎯 今使える自由なお金")
+    st.markdown(f"## {format_balance_display(remaining_balance)}")
+    
+    if current_allowance > 0:
+        progress_ratio = min(current_spent / current_allowance, 1.0)
+        st.progress(progress_ratio)
+        st.caption(f"予算使用率: {progress_ratio * 100:.1f}% ({current_spent:,.0f} 円 / {current_allowance:,.0f} 円)")
 
     st.divider()
     st.header("📸 レシートを登録する")
-    # ... (このセクションは変更なし)
+    uploaded_file = st.file_uploader("処理したいレシート画像を、ここにアップロードしてください。", type=['png', 'jpg', 'jpeg'])
 
-    # --- 全データ書き出しコーナー ---
+    if uploaded_file:
+        st.image(uploaded_file, caption="アップロードされたレシート", width=300)
+        if st.button("⬆️ このレシートを解析する"):
+            if not gemini_api_key_input:
+                st.warning("サイドバーからGemini APIキーを設定してください。")
+            else:
+                try:
+                    with st.spinner("🧠 AIがレシートを解析中..."):
+                        genai.configure(api_key=gemini_api_key_input)
+                        model = genai.GenerativeModel('gemini-1.5-flash-latest')
+                        image = Image.open(uploaded_file)
+                        gemini_response = model.generate_content([GEMINI_PROMPT, image])
+                        cleaned_text = gemini_response.text.strip()
+                        json_start_index = cleaned_text.find('{')
+                        json_end_index = cleaned_text.rfind('}') + 1
+                        
+                        if json_start_index != -1 and json_end_index != 0:
+                            json_str = cleaned_text[json_start_index:json_end_index]
+                            extracted_data = json.loads(json_str)
+                        else:
+                            raise ValueError("AIの応答から有効なJSONを見つけられませんでした。")
+                    
+                    st.session_state.receipt_preview = {
+                        "total_amount": float(extracted_data.get("total_amount", 0)),
+                        "items": extracted_data.get("items", [])
+                    }
+                    st.rerun()
+
+                except Exception as e:
+                    st.error(f"❌ 処理中に予期せぬエラーが発生しました: {e}")
+                    if 'gemini_response' in locals():
+                        st.code(gemini_response.text, language="text")
+
     st.divider()
     st.header("🗂️ 全支出履歴の書き出し")
-    # ... (このセクションは変更なし)
+    
+    if st.session_state.all_receipts:
+        st.info(f"現在、{len(st.session_state.all_receipts)} 件のレシートデータが保存されています。")
+        
+        flat_list_for_csv = []
+        for receipt in st.session_state.all_receipts:
+            for item in receipt['items']:
+                item_name = item.get('name', 'N/A')
+                item_price = item.get('price', 0)
+                flat_list_for_csv.append({
+                    "日付": receipt.get('date', 'N/A'),
+                    "品物名": item_name,
+                    "金額": item_price,
+                    "レシート合計": receipt.get('total_amount', 0)
+                })
+        
+        if flat_list_for_csv:
+            df_for_csv = pd.DataFrame(flat_list_for_csv)
+            csv_string = df_for_csv.to_csv(index=False, encoding='utf-8-sig')
 
-    # --- データ管理機能の強化 ---
+            st.download_button(
+               label="✅ 全支出履歴をCSVでダウンロード",
+               data=csv_string,
+               file_name=f"all_receipts_history_{datetime.now().strftime('%Y%m%d')}.csv",
+               mime="text/csv",
+               type="primary"
+            )
+        else:
+            st.warning("保存されているデータに有効な品目がありません。")
+    else:
+        st.warning("まだ保存されているレシートデータがありません。")
+
     st.divider()
     st.header("🔄 データ管理")
     col1, col2 = st.columns(2)
@@ -184,9 +281,9 @@ else:
         if st.button("支出履歴とレシートデータをリセット", type="secondary"):
             st.session_state.total_spent = 0.0
             st.session_state.all_receipts = []
-            #【修正】固有キーを追加
-            localS.setItem("total_spent", 0.0, key="reset_spent_only")
-            localS.setItem("all_receipt_data", [], key="reset_receipts_only")
+            #【エラー修正】固有キーを追加
+            localS.setItem("total_spent", 0.0, key="reset_spent")
+            localS.setItem("all_receipt_data", [], key="reset_receipts")
             st.success("支出履歴と全レシートデータをリセットしました！")
             st.rerun()
     with col2:
@@ -196,7 +293,7 @@ else:
             st.session_state.receipt_preview = None
             st.session_state.all_receipts = []
             st.session_state.initialized = False
-            #【修正】固有キーを追加
+            #【エラー修正】固有キーを追加
             localS.setItem("monthly_allowance", 0.0, key="full_reset_allowance")
             localS.setItem("total_spent", 0.0, key="full_reset_spent")
             localS.setItem("all_receipt_data", [], key="full_reset_receipts")

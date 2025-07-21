@@ -143,9 +143,7 @@ def add_expense(amount: float, description: str = "レシートからの支出")
 
 # --- ⑧ メインアプリケーション ---
 def run_allowance_recorder_app():
-    # 初期化
-    initialize_session_state()
-    check_month_change()
+    # 初期化は main() で実行済みなので削除
     
     # ヘッダー
     st.title("💰 お小遣いレコーダー")
@@ -422,36 +420,47 @@ def run_allowance_recorder_app():
         5. 残り予算をリアルタイムで確認
         """)
 
-# --- ⑨ サイドバー ---
-with st.sidebar:
-    st.markdown("### 🎯 クイックステータス")
+# --- ⑨ メイン処理の実行 ---
+def main():
+    # 最初に初期化を実行
+    initialize_session_state()
+    check_month_change()
     
-    # 現在の状況をサイドバーにも表示
-    if st.session_state.monthly_allowance > 0:
-        progress = min(st.session_state.total_spent / st.session_state.monthly_allowance, 1.0)
-        st.progress(progress)
-        st.caption(f"予算使用率: {progress * 100:.1f}%")
+    # サイドバー
+    with st.sidebar:
+        st.markdown("### 🎯 クイックステータス")
+        
+        # 現在の状況をサイドバーにも表示
+        if st.session_state.monthly_allowance > 0:
+            progress = min(st.session_state.total_spent / st.session_state.monthly_allowance, 1.0)
+            st.progress(progress)
+            st.caption(f"予算使用率: {progress * 100:.1f}%")
+        
+        remaining = calculate_remaining_balance(st.session_state.monthly_allowance, st.session_state.total_spent)
+        if remaining >= 0:
+            st.success(f"残り: {remaining:,.0f}円")
+        else:
+            st.error(f"オーバー: {abs(remaining):,.0f}円")
+        
+        st.markdown("---")
+        st.markdown("### 📖 使い方ガイド")
+        st.markdown("""
+        1. **予算設定タブ**で月の予算を設定
+        2. **設定タブ**でGemini APIキーを入力
+        3. **レシート解析タブ**で写真をアップロード
+        4. AI解析結果を確認して支出を記録
+        5. 残り予算をリアルタイムで確認
+        """)
+        
+        st.markdown("---")
+        current_date = datetime.datetime.now().strftime("%Y年%m月%d日")
+        st.caption(f"📅 {current_date}")
     
-    remaining = calculate_remaining_balance(st.session_state.monthly_allowance, st.session_state.total_spent)
-    if remaining >= 0:
-        st.success(f"残り: {remaining:,.0f}円")
-    else:
-        st.error(f"オーバー: {abs(remaining):,.0f}円")
-    
-    st.markdown("---")
-    st.markdown("### 📖 使い方ガイド")
-    st.markdown("""
-    1. **予算設定タブ**で月の予算を設定
-    2. **設定タブ**でGemini APIキーを入力
-    3. **レシート解析タブ**で写真をアップロード
-    4. AI解析結果を確認して支出を記録
-    5. 残り予算をリアルタイムで確認
-    """)
-    
-    st.markdown("---")
-    current_date = datetime.datetime.now().strftime("%Y年%m月%d日")
-    st.caption(f"📅 {current_date}")
-
-# --- ⑩ メイン処理の実行 ---
-if __name__ == "__main__":
+    # メインアプリを実行
     run_allowance_recorder_app()
+
+# --- ⑩ エントリーポイント ---
+if __name__ == "__main__":
+    main()
+else:
+    main()

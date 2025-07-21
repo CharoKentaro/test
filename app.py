@@ -1,43 +1,45 @@
 import streamlit as st
-import re
 from PIL import Image
 import pytesseract
+import re
+import io
 
-# セッションステートの初期化
-if "budget" not in st.session_state:
-    st.session_state.budget = 1000  # 初期予算
-if "spent" not in st.session_state:
-    st.session_state.spent = 0
+# （ローカル環境の方は以下のようにパスを設定）
+# pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 
-st.title("📸 レシート家計簿")
+st.title("🧾 レシートOCR：使った金額を自動で読み取る")
 
-# レシート画像のアップロード
-uploaded_file = st.file_uploader("🧾 レシート画像をアップロード", type=["jpg", "jpeg", "png"])
-if uploaded_file:
-    image = Image.open(uploaded_file)
-    st.image(image, caption="アップロードされたレシート", use_column_width=True)
+# --- 画像アップロード ---
+uploaded_file = st.file_uploader("📷 レシート画像をアップロードしてください", type=["jpg", "jpeg", "png"])
 
-    # OCR処理
-    text = pytesseract.image_to_string(image, lang='jpn')
-    st.text_area("🔍 抽出されたテキスト", text, height=200)
+# --- 金額手入力（OCRの失敗に備えて） ---
+manual_amount = st.number_input("💰 手入力で金額を追加したい場合はこちらに入力", min_value=0, step=1)
 
-    # 金額の抽出（全角・半角の「円」や￥対応）
-    amounts = re.findall(r"[¥￥]?\s?(\d{1,5})(?:円)?", text)
-    if amounts:
-        extracted_amounts = list(map(int, amounts))
-        total_amount = sum(extracted_amounts)
+# --- OCR処理と金額抽出 ---
+if uploaded_file is not None:
+    try:
+        image = Image.open(uploaded_file)
+        st.image(image, caption="アップロードされたレシート", use_column_width=True)
 
-        if st.button("✅ この金額を支出として記録"):
-            st.session_state.spent += total_amount
-            st.success(f"{total_amount} 円を支出として記録しました！")
+        # OCRでテキスト抽出（日本語指定）
+        text = pytesseract.image_to_string(image, lang='jpn')
+        st.text_area("📝 認識されたテキスト", text, height=200)
 
-# 現在の状態を表示
-remaining = st.session_state.budget - st.session_state.spent
-usage_rate = st.session_state.spent / st.session_state.budget * 100 if st.session_state.budget else 0
+        # 金額の抽出（例：123円、1,234など）
+        prices = re.findall(r'\d{1,3}(?:,\d{3})*|\d+', text)
+        prices = [int(p.replace(',', '')) for p in prices if int(p.replace(',', '')) < 100000]
 
-st.markdown("## 📊 現在の状況")
-st.metric("💰 今月の予算", f"{st.session_state.budget} 円")
-st.metric("📉 使った金額", f"{st.session_state.spent} 円")
-st.metric("💸 残り予算", f"{remaining} 円")
-st.metric("🎯 今使える自由なお金", f"🟢 {remaining} 円")
-st.metric("📈 予算使用率", f"{usage_rate:.1f}%")
+        if prices:
+            detected_total = max(prices)
+            total_spent = detected_total + manual_amount
+            st.success(f"✅ OCRで検出された最大の金額: {detected_total:,} 円")
+            st.info(f"💵 合計（手入力含む）: {total_spent:,} 円")
+        else:
+            st.warning("❗金額が検出されませんでした。手入力欄をご利用ください。")
+
+    except Exception as e:
+        st.error(f"⚠️ エラーが発生しました：{e}")
+
+else:
+    st.write("👆 レシート画像をアップロードしてください。")
+

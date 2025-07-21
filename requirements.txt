@@ -2,3 +2,4 @@ streamlit
 streamlit-local-storage
 google-generativeai
 Pillow
+pytesseract

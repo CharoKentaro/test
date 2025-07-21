@@ -1,10 +1,11 @@
 import streamlit as st
+from google.api_core.client_options import ClientOptions
 from google.cloud import vision
 from streamlit_local_storage import LocalStorage
 
 # --- ① アプリの基本設定 ---
 st.set_page_config(
-    page_title="レシート画像 de 簡単データ化くん (PoC)",
+    page_title="レシート画像 de 簡単データ化くん (PoC Ver.2)",
     page_icon="🧾"
 )
 
@@ -16,9 +17,9 @@ except Exception as e:
     st.stop()
 
 # --- ③ メインの処理を実行する関数 ---
-def run_receipt_ocr_app(api_key_json_str):
-    st.title("🧾 レシート画像 de 簡単データ化くん (PoC)")
-    st.info("このアプリは、レシート画像から文字を読み取る機能の技術検証（PoC）です。")
+def run_receipt_ocr_app(api_key_str):
+    st.title("🧾 レシート画像 de 簡単データ化くん (PoC Ver.2)")
+    st.info("【改善版】シンプルなAPIキーで、レシート画像から文字を読み取る機能の技術検証です。")
 
     uploaded_file = st.file_uploader(
         "処理したいレシート画像を、ここにアップロードしてください。",
@@ -30,20 +31,17 @@ def run_receipt_ocr_app(api_key_json_str):
             st.warning("画像がアップロードされていません。")
             st.stop()
         
-        if not api_key_json_str:
-            st.warning("サイドバーでVision APIの認証情報（JSON）を入力し、保存してください。")
+        if not api_key_str:
+            st.warning("サイドバーでVision APIの「APIキー」を入力し、保存してください。")
             st.stop()
 
         try:
-            # --- ここがVision APIを呼び出す心臓部 ---
+            # --- ここがVision APIを呼び出す心臓部（APIキー方式） ---
             with st.spinner("🧠 AIがレシートの文字を解析中..."):
-                # 文字列形式のJSONを辞書に変換
-                import json
-                credentials_dict = json.loads(api_key_json_str)
                 
-                # 認証情報を使ってクライアントを初期化
-                credentials = vision.Credentials.from_service_account_info(credentials_dict)
-                client = vision.ImageAnnotatorClient(credentials=credentials)
+                # APIキーを使ってクライアントを初期化
+                client_options = ClientOptions(api_key=api_key_str)
+                client = vision.ImageAnnotatorClient(client_options=client_options)
                 
                 # アップロードされた画像データを読み込む
                 content = uploaded_file.getvalue()
@@ -70,25 +68,25 @@ def run_receipt_ocr_app(api_key_json_str):
 
         except Exception as e:
             st.error(f"❌ 処理中に予期せぬエラーが発生しました: {e}")
-            st.error("🚨 APIキーのJSONが正しい形式か、再度ご確認ください。コピー＆ペーストが不完全な可能性があります。")
+            st.error("🚨 入力されたAPIキーが正しいか、再度ご確認ください。")
 
-# --- ④ サイドバーと、APIキー入力 ---
+# --- ④ サイドバーと、APIキー入力（シンプル版） ---
 with st.sidebar:
     st.header("⚙️ API設定")
     
-    # Vision APIはサービスアカウントのJSONキーを使用するため、入力欄をtext_areaに変更
-    saved_key_json = localS.getItem("vision_api_key_json")
-    default_value = saved_key_json if isinstance(saved_key_json, str) else ""
+    saved_key = localS.getItem("vision_api_key")
+    # キーが存在し、それが文字列であることを確認
+    default_value = saved_key if isinstance(saved_key, str) else ""
     
-    api_key_input = st.text_area(
-        "Vision API サービスアカウントキー (JSON)", 
+    api_key_input = st.text_input(
+        "Vision APIキー", 
+        type="password",  # 念のためパスワード形式にして見えなくします
         value=default_value,
-        height=250,
-        help="Google Cloudからダウンロードした、サービスアカウントのJSONキーの中身を、ここに全て貼り付けてください。"
+        help="Google Cloudで作成したAPIキーを、ここに貼り付けてください。"
     )
     
     if st.button("このAPIキーをブラウザに記憶させる"):
-        localS.setItem("vision_api_key_json", api_key_input)
+        localS.setItem("vision_api_key", api_key_input)
         st.success("APIキーを記憶しました！")
 
 # --- ⑤ メイン処理の、実行 ---

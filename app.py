@@ -122,6 +122,4 @@ with st.sidebar:
         st.success("Gemini APIキーを記憶しました！")
 
 # --- ⑥ メイン処理の、実行 ---
-run_allowance_recorder_app(gemini_api_key_input)```
-
-### **`requirements.txt`**
+run_allowance_recorder_app(gemini_api_key_input)

@@ -3,7 +3,6 @@ import google.generativeai as genai
 from streamlit_local_storage import LocalStorage
 import json
 from PIL import Image
-import io
 
 # --- ① アプリの基本設定 ---
 st.set_page_config(
@@ -51,12 +50,10 @@ def run_allowance_recorder_app(gemini_api_key):
     st.title("💰 お小遣いレコーダー")
     st.info("レシートを登録して、今月使えるお金を管理しよう！")
     
-    # --- セッションステートの初期化（毎回ローカルストレージから最新値を読み込み） ---
-    # ローカルストレージから最新の値を取得
+    # --- セッションステートの初期化 ---
     stored_allowance = localS.getItem("monthly_allowance")
     stored_spent = localS.getItem("total_spent")
     
-    # セッションステートを最新値で更新
     st.session_state.monthly_allowance = float(stored_allowance if stored_allowance is not None else 0.0)
     st.session_state.total_spent = float(stored_spent if stored_spent is not None else 0.0)
     
@@ -75,51 +72,13 @@ def run_allowance_recorder_app(gemini_api_key):
         st.session_state.monthly_allowance = new_allowance
         localS.setItem("monthly_allowance", new_allowance)
         st.success(f"今月のお小遣いを {new_allowance:,.0f} 円に設定しました！")
-        # 即座に画面を更新
         st.rerun()
 
-    # --- 現在の残高表示（メインの見せ場） ---
-    # セッションステートから最新の値を強制的に再取得
-    current_allowance = st.session_state.monthly_allowance
-    current_spent = st.session_state.total_spent
-    remaining_balance = calculate_remaining_balance(current_allowance, current_spent)
-    
-    st.divider()
-    st.header("📊 現在の状況")
-    
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("今月の予算", f"{current_allowance:,.0f} 円")
-    with col2:
-        # 支出がある場合はデルタ表示
-        spent_delta = f"+{current_spent:,.0f} 円" if current_spent > 0 else None
-        st.metric("使った金額", f"{current_spent:,.0f} 円", delta=spent_delta, delta_color="inverse")
-    with col3:
-        # 残高のデルタ（予算からどれだけ減ったか）
-        balance_delta = f"-{current_spent:,.0f} 円" if current_spent > 0 else None
-        st.metric("残り予算", f"{remaining_balance:,.0f} 円", delta=balance_delta, delta_color="inverse")
-    
-    # 大きく目立つ残高表示
-    st.markdown("### 🎯 今使える自由なお金")
-    st.markdown(f"## {format_balance_display(remaining_balance)}")
-    
-    # プログレスバーで視覚的に表示
-    if current_allowance > 0:
-        progress_ratio = min(current_spent / current_allowance, 1.0)
-        st.progress(progress_ratio)
-        st.caption(f"予算使用率: {progress_ratio * 100:.1f}% ({current_spent:,.0f} 円 / {current_allowance:,.0f} 円)")
-    
-    # 支出がある場合の詳細表示
-    if current_spent > 0:
-        st.info(f"💡 これまでに {current_spent:,.0f} 円使いました。残り {remaining_balance:,.0f} 円使えます！")
-
-    st.divider()
-
     # --- レシート解析機能 ---
+    st.divider()
     st.header("📸 レシートを登録する")
     uploaded_file = st.file_uploader("処理したいレシート画像を、ここにアップロードしてください。", type=['png', 'jpg', 'jpeg'])
 
-    # アップロードされた画像のプレビュー
     if uploaded_file:
         st.image(uploaded_file, caption="アップロードされたレシート", width=300)
 
@@ -139,41 +98,38 @@ def run_allowance_recorder_app(gemini_api_key):
             
             st.success("🎉 AIによる解析が完了しました！")
             
-            # --- 解析結果の表示と確認 ---
             try:
                 total_amount = float(extracted_data.get("total_amount", 0))
                 
                 st.subheader("📋 解析結果")
                 st.json(extracted_data)
                 
-                # ユーザーが確認・修正できる入力欄
                 corrected_total = st.number_input(
                     "AIが読み取った合計金額はこちらです。必要なら修正してください。", 
                     value=total_amount,
                     min_value=0.0
                 )
                 
-                # 支出後の予想残高を表示
-                projected_balance = calculate_remaining_balance(current_allowance, 
-                                                             current_spent + corrected_total)
+                projected_balance = calculate_remaining_balance(
+                    st.session_state.monthly_allowance, 
+                    st.session_state.total_spent + corrected_total
+                )
                 st.info(f"この支出を記録すると、残り予算は **{projected_balance:,.0f} 円** になります。")
                 
                 if st.button("💰 この金額で支出を確定する"):
-                    # 支出を累積に追加
                     new_total_spent = st.session_state.total_spent + corrected_total
                     st.session_state.total_spent = new_total_spent
                     localS.setItem("total_spent", new_total_spent)
                     
-                    # 最新の残高を計算
-                    updated_balance = calculate_remaining_balance(st.session_state.monthly_allowance, new_total_spent)
+                    updated_balance = calculate_remaining_balance(
+                        st.session_state.monthly_allowance, new_total_spent
+                    )
                     
                     st.success(f"🎉 {corrected_total:,.0f} 円の支出を記録しました！")
                     st.markdown(f"### 💳 更新後の状況")
                     st.markdown(f"- **使った金額**: {new_total_spent:,.0f} 円")
                     st.markdown(f"- **残り予算**: {format_balance_display(updated_balance)}")
                     st.balloons()
-                    
-                    # 画面を即座に更新
                     st.rerun()
 
             except (ValueError, TypeError) as e:
@@ -191,7 +147,7 @@ def run_allowance_recorder_app(gemini_api_key):
 
         except Exception as e:
             st.error(f"❌ 処理中に予期せぬエラーが発生しました: {e}")
-    
+
     # --- 支出履歴のリセット機能 ---
     st.divider()
     st.header("🔄 データ管理")
@@ -212,6 +168,35 @@ def run_allowance_recorder_app(gemini_api_key):
             localS.setItem("total_spent", 0.0)
             st.success("全データをリセットしました！")
             st.rerun()
+
+    # --- 📊 現在の状況（最後に表示） ---
+    st.divider()
+    st.header("📊 現在の状況")
+    
+    current_allowance = st.session_state.monthly_allowance
+    current_spent = st.session_state.total_spent
+    remaining_balance = calculate_remaining_balance(current_allowance, current_spent)
+
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("今月の予算", f"{current_allowance:,.0f} 円")
+    with col2:
+        spent_delta = f"+{current_spent:,.0f} 円" if current_spent > 0 else None
+        st.metric("使った金額", f"{current_spent:,.0f} 円", delta=spent_delta, delta_color="inverse")
+    with col3:
+        balance_delta = f"-{current_spent:,.0f} 円" if current_spent > 0 else None
+        st.metric("残り予算", f"{remaining_balance:,.0f} 円", delta=balance_delta, delta_color="inverse")
+
+    st.markdown("### 🎯 今使える自由なお金")
+    st.markdown(f"## {format_balance_display(remaining_balance)}")
+
+    if current_allowance > 0:
+        progress_ratio = min(current_spent / current_allowance, 1.0)
+        st.progress(progress_ratio)
+        st.caption(f"予算使用率: {progress_ratio * 100:.1f}% ({current_spent:,.0f} 円 / {current_allowance:,.0f} 円)")
+
+    if current_spent > 0:
+        st.info(f"💡 これまでに {current_spent:,.0f} 円使いました。残り {remaining_balance:,.0f} 円使えます！")
 
 # --- ⑥ サイドバーと、APIキー入力 ---
 with st.sidebar:

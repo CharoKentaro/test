@@ -58,11 +58,11 @@ def format_balance_display(balance):
 
 # --- ⑤ メイン処理 ---
 
-# --- 【機能追加】セッションステートの初期化に「金庫」を追加 ---
+# --- セッションステートの初期化に「金庫」を追加 ---
 if "initialized" not in st.session_state:
     st.session_state.monthly_allowance = float(localS.getItem("monthly_allowance") or 0.0)
     st.session_state.total_spent = float(localS.getItem("total_spent") or 0.0)
-    st.session_state.receipt_preview = None 
+    st.session_state.receipt_preview = None
     # 全レシートデータを格納する「金庫」を準備
     st.session_state.all_receipts = localS.getItem("all_receipt_data") or []
     st.session_state.initialized = True
@@ -76,14 +76,13 @@ with st.sidebar:
         value=saved_gemini_key if isinstance(saved_gemini_key, str) else ""
     )
     if st.button("Geminiキーを記憶"):
-        #【エラー修正】固有キーを追加
         localS.setItem("gemini_api_key", gemini_api_key_input, key="set_api_key")
         st.success("Gemini APIキーを記憶しました！")
-    
+
     st.divider()
     st.caption("💡 使い方のヒント")
     st.caption("1. 今月の予算を設定")
-    st.caption("2. レシート画像をアップロード") 
+    st.caption("2. レシートを撮影 or アップロード")
     st.caption("3. AI解析結果を確認・修正")
     st.caption("4. 支出を確定＆品目リストを保存")
     st.caption("5. 全履歴をいつでもダウンロード")
@@ -98,9 +97,9 @@ if st.session_state.receipt_preview:
     st.info("AIが読み取った内容を確認・修正し、問題なければ「確定」してください。")
 
     preview_data = st.session_state.receipt_preview
-    
+
     corrected_amount = st.number_input(
-        "AIが読み取った合計金額はこちらです。必要なら修正してください。", 
+        "AIが読み取った合計金額はこちらです。必要なら修正してください。",
         value=preview_data['total_amount'], min_value=0.0, step=1.0, key="correction_input"
     )
 
@@ -135,7 +134,7 @@ if st.session_state.receipt_preview:
         st.metric("使った金額", f"{projected_spent:,.0f} 円", delta=f"+{corrected_amount:,.0f} 円", delta_color="inverse")
     with col3:
         st.metric("残り予算", f"{projected_balance:,.0f} 円", delta=f"-{corrected_amount:,.0f} 円", delta_color="inverse")
-    
+
     # 確定・キャンセルボタン
     st.divider()
     confirm_col, cancel_col = st.columns(2)
@@ -147,18 +146,16 @@ if st.session_state.receipt_preview:
                 "items": edited_df.to_dict('records')
             }
             st.session_state.all_receipts.append(new_receipt_record)
-            #【エラー修正】固有キーを追加
             localS.setItem("all_receipt_data", st.session_state.all_receipts, key="confirm_set_receipts")
 
             st.session_state.total_spent += corrected_amount
-            #【エラー修正】固有キーを追加
             localS.setItem("total_spent", st.session_state.total_spent, key="confirm_set_total")
-            
+
             st.session_state.receipt_preview = None
-            
+
             st.success(f"🎉 {corrected_amount:,.0f} 円の支出を記録し、履歴に保存しました！")
             st.balloons()
-            time.sleep(2) 
+            time.sleep(2)
             st.rerun()
     with cancel_col:
         if st.button("❌ キャンセル"):
@@ -168,16 +165,15 @@ if st.session_state.receipt_preview:
 # --- 通常モードの処理 ---
 else:
     st.info("レシートを登録して、今月使えるお金を管理しよう！")
-    
+
     st.divider()
     st.header("💳 今月のお小遣い設定")
     new_allowance = st.number_input(
-        "今月のお小遣いを入力してください", 
+        "今月のお小遣いを入力してください",
         value=st.session_state.monthly_allowance, step=1000.0, min_value=0.0
     )
     if st.button("この金額で設定する"):
         st.session_state.monthly_allowance = new_allowance
-        #【エラー修正】固有キーを追加
         localS.setItem("monthly_allowance", new_allowance, key="set_allowance")
         st.success(f"今月のお小遣いを {new_allowance:,.0f} 円に設定しました！")
         st.rerun()
@@ -194,10 +190,10 @@ else:
         st.metric("使った金額", f"{current_spent:,.0f} 円")
     with col3:
         st.metric("残り予算", f"{remaining_balance:,.0f} 円")
-    
+
     st.markdown("### 🎯 今使える自由なお金")
     st.markdown(f"## {format_balance_display(remaining_balance)}")
-    
+
     if current_allowance > 0:
         progress_ratio = min(current_spent / current_allowance, 1.0)
         st.progress(progress_ratio)
@@ -205,7 +201,24 @@ else:
 
     st.divider()
     st.header("📸 レシートを登録する")
-    uploaded_file = st.file_uploader("処理したいレシート画像を、ここにアップロードしてください。", type=['png', 'jpg', 'jpeg'])
+
+    # --- ▼▼▼【ちゃろ様ご提案機能】ここからが変更箇所です ▼▼▼ ---
+    st.write("##### 方法１：カメラで直接撮影する")
+    camera_image = st.camera_input(
+        "📷 **カメラを起動して撮影**",
+        help="スマホのカメラでレシートを直接撮影して読み込ませます。"
+    )
+
+    st.write("##### 方法２：保存済みの画像を選ぶ")
+    file_uploader = st.file_uploader(
+        "📁 **画像をアップロード**",
+        type=['png', 'jpg', 'jpeg'],
+        help="撮影済みのレシート画像をファイルから選択します。"
+    )
+
+    # カメラ入力かファイルアップロードのどちらかが使用された場合に `uploaded_file` に画像データを格納
+    uploaded_file = camera_image or file_uploader
+    # --- ▲▲▲ ここまでが変更箇所です ▲▲▲ ---
 
     if uploaded_file:
         st.image(uploaded_file, caption="アップロードされたレシート", width=300)
@@ -222,13 +235,13 @@ else:
                         cleaned_text = gemini_response.text.strip()
                         json_start_index = cleaned_text.find('{')
                         json_end_index = cleaned_text.rfind('}') + 1
-                        
+
                         if json_start_index != -1 and json_end_index != 0:
                             json_str = cleaned_text[json_start_index:json_end_index]
                             extracted_data = json.loads(json_str)
                         else:
                             raise ValueError("AIの応答から有効なJSONを見つけられませんでした。")
-                    
+
                     st.session_state.receipt_preview = {
                         "total_amount": float(extracted_data.get("total_amount", 0)),
                         "items": extracted_data.get("items", [])
@@ -242,13 +255,17 @@ else:
 
     st.divider()
     st.header("🗂️ 全支出履歴の書き出し")
-    
+
     if st.session_state.all_receipts:
         st.info(f"現在、{len(st.session_state.all_receipts)} 件のレシートデータが保存されています。")
-        
+
         flat_list_for_csv = []
         for receipt in st.session_state.all_receipts:
-            for item in receipt['items']:
+            # 【堅牢性向上のための修正】itemsがNoneまたは空の場合の処理を追加
+            items = receipt.get('items')
+            if not items: 
+                continue
+            for item in items:
                 item_name = item.get('name', 'N/A')
                 item_price = item.get('price', 0)
                 flat_list_for_csv.append({
@@ -257,7 +274,7 @@ else:
                     "金額": item_price,
                     "レシート合計": receipt.get('total_amount', 0)
                 })
-        
+
         if flat_list_for_csv:
             df_for_csv = pd.DataFrame(flat_list_for_csv)
             csv_string = df_for_csv.to_csv(index=False, encoding='utf-8-sig')
@@ -281,7 +298,6 @@ else:
         if st.button("支出履歴とレシートデータをリセット", type="secondary"):
             st.session_state.total_spent = 0.0
             st.session_state.all_receipts = []
-            #【エラー修正】固有キーを追加
             localS.setItem("total_spent", 0.0, key="reset_spent")
             localS.setItem("all_receipt_data", [], key="reset_receipts")
             st.success("支出履歴と全レシートデータをリセットしました！")
@@ -293,7 +309,6 @@ else:
             st.session_state.receipt_preview = None
             st.session_state.all_receipts = []
             st.session_state.initialized = False
-            #【エラー修正】固有キーを追加
             localS.setItem("monthly_allowance", 0.0, key="full_reset_allowance")
             localS.setItem("total_spent", 0.0, key="full_reset_spent")
             localS.setItem("all_receipt_data", [], key="full_reset_receipts")

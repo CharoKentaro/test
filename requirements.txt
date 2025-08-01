@@ -1,7 +1,4 @@
-# requirements.txt
-
 streamlit
 google-generativeai
-google-cloud-speech
 streamlit-mic-recorder
-pytz # calendar_toolから流用している関数で必要
+streamlit-local-storage

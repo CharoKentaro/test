@@ -46,13 +46,4 @@ with st.sidebar:
 # ★★★★★ 『偉大なる、仕分け人』の、最終契約書 ★★★★★
 if st.session_state.tool_selection == "❤️ 認知予防ツール": # ★ 変更点：契約書を、正式な表示名に合わせる
     AI_Memory_Partner.show_tool(gemini_api_key=st.session_state.get('gemini_api_key', ''))
-elif st.session_state.tool_selection == "🤝 翻訳ツール":
-    translator_tool.show_tool(gemini_api_key=st.session_state.get('gemini_api_key', ''))
-elif st.session_state.tool_selection == "💰 お小遣い管理":
-    okozukai_recorder_tool.show_tool(gemini_api_key=st.session_state.get('gemini_api_key', ''))
-elif st.session_state.tool_selection == "📅 カレンダーAI秘書":
-    calendar_tool.show_tool(gemini_api_key=st.session_state.get('gemini_api_key', ''))
-elif st.session_state.tool_selection == "📝 議事録作成":
-    gijiroku_tool.show_tool(gemini_api_key=st.session_state.get('gemini_api_key', ''))
-elif st.session_state.tool_selection == "🧠 賢者の記憶":
-    kensha_no_kioku_tool.show_tool(gemini_api_key=st.session_state.get('gemini_api_key', ''))
+

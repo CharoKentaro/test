@@ -90,7 +90,7 @@ def show_tool(gemini_api_key):
         st.success("🎉 たくさんお話いただき、ありがとうございます！")
         st.info("このツールが、あなたの心を温める一助となれば幸いです。\n\n応援ページへ移動することで、またお話を続けることができます。")
         # ★ 変更点：応援ページのURL
-        portal_url = "https://example.com/your-support-page" # ← ちゃろ様の応援ページのURLに変更してください
+        portal_url = "https://experiment-site.pray-power-is-god-and-cocoro.com/continue.html" # ← ちゃろ様の応援ページのURLに変更してください
         st.link_button("応援ページに移動して、お話を続ける", portal_url, type="primary", use_container_width=True)
     else:
         st.info("下のマイクのボタンを押して、昔の楽しかった思い出や、頑張ったお話など、なんでも自由にお話しください。")

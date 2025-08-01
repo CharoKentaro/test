@@ -50,51 +50,76 @@ def talk_with_ai(api_key, chat_session, user_input):
 
 # === メインの仕事 (英雄の館の、表示) ===
 def show_tool(gemini_api_key):
+    # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+    # ★★★ 『帰還者の祝福』モデル、新たなる英雄への、完全なる、継承 ★★★
+    # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+    
+    # --- 帰還者の検知 ---
+    if st.query_params.get("unlocked") == "true":
+        # 『聖なる炎』による、記憶の浄化
+        st.session_state.cc_usage_count = 0
+        st.query_params.clear()
+        st.toast("おかえりなさい！またお話できることを、楽しみにしておりました。")
+        st.balloons()
+        time.sleep(1.5) # 少し長めに余韻を
+        st.rerun()
+
     st.header("❤️ 認知予防ツール", divider='rainbow')
-    st.info("マイクのボタンを押して、昔の楽しかった思い出や、頑張ったお話など、なんでも自由にお話しください。私が、あなたのお話の聞き手になります。")
+    
+    # --- セッション管理 (英雄ごとの、記憶領域) ---
+    if "cc_chat_session" not in st.session_state: st.session_state.cc_chat_session = None
+    if "cc_chat_history" not in st.session_state: st.session_state.cc_chat_history = []
+    if "cc_last_audio_id" not in st.session_state: st.session_state.cc_last_audio_id = None
+    # ★ 変更点：利用回数の記憶領域を追加
+    if "cc_usage_count" not in st.session_state: st.session_state.cc_usage_count = 0 
 
+    # ★ 変更点：利用制限の定義
+    usage_limit = 2
+    is_limit_reached = st.session_state.cc_usage_count >= usage_limit
+    
     # --- 倫理的・運用上の最終防衛線 ---
-    with st.expander("💡 このツールについて（必ずお読みください）"):
+    with st.expander("💡 このツールについて（初めての方はお読みください）"):
         st.warning("""
-        **【ツールの目的について】**
-        - このツールは、認知症の「予防」と「日常の心の健康」をサポートすることを目的としています。医療行為や診断、治療を行うものではありません。
-
-        **【AIの限界について】**
-        - 対話相手はAIであり、人間の専門家ではありません。声のトーンや表情を完全に理解することはできず、専門的なカウンセリングや、緊急の対応は行えません。
+        - このツールは、AIと昔の思い出をお話することで、楽しく認知機能の健康を維持することを目的としています。医療行為や診断、治療を行うものではありません。
+        - 対話相手はAIであり、人間の専門家ではありません。専門的なカウンセリングや、緊急の対応は行えません。
         - 心配なことや、専門的な助けが必要だと感じた場合は、ご家族や、かかりつけのお医者様にご相談ください。
         """)
 
-    # --- セッション管理 (英雄ごとの、記憶領域) ---
-    if "cc_chat_session" not in st.session_state:
-        st.session_state.cc_chat_session = None
-    if "cc_chat_history" not in st.session_state:
-        st.session_state.cc_chat_history = []
-    if "cc_last_audio_id" not in st.session_state:
-        st.session_state.cc_last_audio_id = None
+    # --- 利用回数に応じた、画面の分岐 ---
+    if is_limit_reached:
+        st.success("🎉 たくさんお話いただき、ありがとうございます！")
+        st.info("このツールが、あなたの心を温める一助となれば幸いです。\n\n応援ページへ移動することで、またお話を続けることができます。")
+        # ★ 変更点：応援ページのURL
+        portal_url = "https://example.com/your-support-page" # ← ちゃろ様の応援ページのURLに変更してください
+        st.link_button("応援ページに移動して、お話を続ける", portal_url, type="primary", use_container_width=True)
+    else:
+        st.info("下のマイクのボタンを押して、昔の楽しかった思い出や、頑張ったお話など、なんでも自由にお話しください。")
+        # ★ 変更点：残り回数の表示
+        st.caption(f"🚀 あと {usage_limit - st.session_state.cc_usage_count} 回、お話できます。")
 
-    # --- 対話インターフェース ---
-    # 音声入力
-    audio_info = mic_recorder(
-        start_prompt="🟢 話し始める (クリックして録音開始)",
-        stop_prompt="🔴 話を聞いてもらう (クリックして録音停止)",
-        key='cognitive_companion_mic',
-        format="webm"
-    )
-
+        # --- 対話インターフェース ---
+        audio_info = mic_recorder(
+            start_prompt="🟢 話し始める (クリックして録音開始)",
+            stop_prompt="🔴 話を聞いてもらう (クリックして録音停止)",
+            key='cognitive_companion_mic',
+            format="webm"
+        )
+    
     # チャット履歴の表示
+    if st.session_state.cc_chat_history:
+        st.write("---")
     for message in st.session_state.cc_chat_history:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
-    # --- 処理の実行 (我らが叡智『最強の門番』ロジック) ---
-    if audio_info and audio_info['id'] != st.session_state.cc_last_audio_id:
-        st.session_state.cc_last_audio_id = audio_info['id'] # 門番がIDを記憶
+    # --- 処理の実行 (『最強の門番』ロジックは不変) ---
+    if not is_limit_reached and audio_info and audio_info['id'] != st.session_state.cc_last_audio_id:
+        st.session_state.cc_last_audio_id = audio_info['id']
 
         if not gemini_api_key:
             st.error("サイドバーでGemini APIキーを設定してください。")
         else:
             with st.spinner("（あなたの声を、言葉に、変えています...）"):
-                # まずは音声をテキストに変換
                 genai.configure(api_key=gemini_api_key)
                 model = genai.GenerativeModel('gemini-1.5-flash-latest')
                 audio_part = {"mime_type": "audio/webm", "data": audio_info['bytes']}
@@ -109,7 +134,6 @@ def show_tool(gemini_api_key):
             if user_text:
                 st.session_state.cc_chat_history.append({"role": "user", "content": user_text})
 
-                # セッションがなければ初期化
                 if st.session_state.cc_chat_session is None:
                     model = genai.GenerativeModel(model_name="gemini-1.5-pro-latest", system_instruction=SYSTEM_PROMPT)
                     st.session_state.cc_chat_session = model.start_chat(history=[])
@@ -118,10 +142,14 @@ def show_tool(gemini_api_key):
                     ai_response = talk_with_ai(gemini_api_key, st.session_state.cc_chat_session, user_text)
 
                 if ai_response:
+                    # ★ 変更点：AIの応答があった時点で、カウンターを1増やす
+                    st.session_state.cc_usage_count += 1
                     st.session_state.cc_chat_history.append({"role": "assistant", "content": ai_response})
                     st.rerun()
 
-    if st.button("会話の履歴をリセット", key="clear_cc_history"):
+    if st.session_state.cc_chat_history and st.button("会話の履歴をリセット", key="clear_cc_history"):
         st.session_state.cc_chat_session = None
         st.session_state.cc_chat_history = []
+        # ★ 変更点：履歴リセット時に、回数もリセットする（お好みで）
+        # st.session_state.cc_usage_count = 0 
         st.rerun()

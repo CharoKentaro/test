@@ -3,7 +3,6 @@ from streamlit_local_storage import LocalStorage
 import time
 
 # ★★★ 七人の、英雄たちが、ここに、集結します ★★★
-from tools import translator_tool, okozukai_recorder_tool, calendar_tool, gijiroku_tool, kensha_no_kioku_tool
 from tools import AI_Memory_Partner # ★ 変更点：英雄の、正式名称での、召喚
 
 # --- アプリの基本設定 (変更なし) ---

@@ -3,7 +3,7 @@ import google.generativeai as genai
 import time
 from google.api_core import exceptions
 import json
-
+from streamlit_mic_recorder import mic_recorder
 
 # ===============================================================
 # 補助関数 (『原点回帰』、シンプル is ベスト・バージョン)

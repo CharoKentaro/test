@@ -1,68 +1,46 @@
 import streamlit as st
-from streamlit_local_storage import LocalStorage
-import time
-# ★★★ 六人の、英雄たちが、ここに、集結します ★★★
-from tools import translator_tool, okozukai_recorder_tool, calendar_tool, gijiroku_tool, kensha_no_kioku_tool, ai_memory_partner_tool
+import sys
+import os
 
-# --- アプリの基本設定 (変更なし) ---
-st.set_page_config(page_title="Multi-Tool Portal", page_icon="🚀", layout="wide")
+st.set_page_config(layout="wide")
+st.title("🕵️ 英雄（ツール）個別召喚テスト")
+st.info("どのツールファイルの読み込みでエラーが起きるかを特定します。")
 
-# --- サイドバー (最終形態) ---
-with st.sidebar:
-    st.title("🚀 Multi-Tool Portal")
-    st.divider()
+# --- 現在のPythonがモジュールを探しに行く場所の一覧を表示 ---
+st.header("Pythonの探索パス（sys.path）")
+st.write(sys.path)
+st.caption("このリストのどこかに、`/mount/src/test` のような、プロジェクトのルートフォルダが含まれているはずです。")
 
-    # ★★★ 選択肢は、六つに ★★★
-    if "tool_selection" not in st.session_state:
-        st.session_state.tool_selection = "🤝 翻訳ツール" # 初期値を設定
 
-    tool_selection = st.radio(
-        "利用するツールを選択してください:",
-        ("🤝 翻訳ツール", "💰 お小遣い管理", "📅 AI秘書", "📝 議事録作成", "🧠 賢者の記憶", "❤️ 認知予防ツール"),
-        key="tool_selection"
-    )
-    st.divider()
+st.header("英雄たちの個別召喚結果")
 
-    # --- APIキー管理 (Gemini一本化の、思想は、揺るがない) ---
-    localS = LocalStorage()
-    saved_key = localS.getItem("gemini_api_key")
-    gemini_default = saved_key if isinstance(saved_key, str) else ""
-    if 'gemini_api_key' not in st.session_state:
-        st.session_state.gemini_api_key = gemini_default
-        
-    with st.expander("⚙️ APIキーの設定", expanded=not st.session_state.gemini_api_key):
-        with st.form("api_key_form", clear_on_submit=False):
-            api_key_input = st.text_input("Gemini APIキー", type="password", value=st.session_state.gemini_api_key)
-            col1, col2 = st.columns(2)
-            with col1: save_button = st.form_submit_button("💾 保存", use_container_width=True)
-            with col2: reset_button = st.form_submit_button("🔄 クリア", use_container_width=True)
+# 召喚リスト
+heroes = [
+    "translator_tool",
+    "okozukai_recorder_tool",
+    "calendar_tool",
+    "gijiroku_tool",
+    "kensha_no_kioku_tool",
+    "ai_memory_partner_tool"
+]
 
-    if save_button:
-        st.session_state.gemini_api_key = api_key_input
-        localS.setItem("gemini_api_key", st.session_state.gemini_api_key)
-        st.success("キーをブラウザに保存しました！"); time.sleep(1); st.rerun()
-    if reset_button:
-        localS.setItem("gemini_api_key", None)
-        st.session_state.gemini_api_key = ""
-        st.success("キーをクリアしました。"); time.sleep(1); st.rerun()
-        
-    st.divider()
-    st.markdown("""<div style="font-size: 0.9em;"><a href="https://aistudio.google.com/app/apikey" target="_blank">Gemini APIキーの取得はこちら</a></div>""", unsafe_allow_html=True)
+has_error = False
 
-# ★★★★★ 『偉大なる、仕分け人』の、最終契約書 ★★★★★
-if st.session_state.tool_selection == "🤝 翻訳ツール":
-    translator_tool.show_tool(gemini_api_key=st.session_state.get('gemini_api_key', ''))
-elif st.session_state.tool_selection == "💰 お小遣い管理":
-    okozukai_recorder_tool.show_tool(gemini_api_key=st.session_state.get('gemini_api_key', ''))
-elif st.session_state.tool_selection == "📅 AI秘書":
-    calendar_tool.show_tool(gemini_api_key=st.session_state.get('gemini_api_key', ''))
-elif st.session_state.tool_selection == "📝 議事録作成":
-    gijiroku_tool.show_tool(gemini_api_key=st.session_state.get('gemini_api_key', ''))
-elif st.session_state.tool_selection == "🧠 賢者の記憶":
-    kensha_no_kioku_tool.show_tool(gemini_api_key=st.session_state.get('gemini_api_key', ''))
-elif st.session_state.tool_selection == "❤️ 認知予防ツール":
-    # 2つの引数(APIキーとLocalStorageオブジェクト)を正しく渡します
-    ai_memory_partner_tool.show_tool(
-        gemini_api_key=st.session_state.get('gemini_api_key', ''),
-        localS_object=localS 
-    )
+# 一人ずつ召喚を試みる
+for hero in heroes:
+    st.subheader(f"召喚テスト：`{hero}`")
+    try:
+        # この書き方で、動的にインポートを試みます
+        __import__(f"tools.{hero}")
+        st.success(f"✅ 英雄 **`{hero}`** の召喚に成功しました。")
+    except Exception as e:
+        st.error(f"❌ 英雄 **`{hero}`** の召喚に失敗しました！これがエラーの直接の原因です。")
+        st.exception(e) # エラーの詳細を表示
+        has_error = True
+
+st.divider()
+
+if has_error:
+    st.error("上記で失敗したファイルに、何らかの問題（ファイルの破損、構文エラー、あるいはそのファイル内での別のImportErrorなど）が潜んでいます。")
+else:
+    st.success("🎉 すべての英雄の召喚に成功しました！もしこれでも元のアプリでエラーが出る場合、キャッシュなど環境側の問題が強く疑われます。")

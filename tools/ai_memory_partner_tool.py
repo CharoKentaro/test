@@ -1,5 +1,5 @@
 # ===============================================================
-# ★★★ ai_memory_partner_tool.py ＜真・最終完成版＞ ★★★
+# ★★★ ai_memory_partner_tool.py ＜ゲートキーパー設計版＞ ★★★
 # ===============================================================
 import streamlit as st
 import google.generativeai as genai
@@ -10,27 +10,8 @@ from google.oauth2 import service_account
 import json
 from streamlit_mic_recorder import mic_recorder
 
-# --- プロンプト（変更なし） ---
-SYSTEM_PROMPT_TRUE_FINAL = """
-# あなたの、役割
-あなたは、高齢者の方の、お話を聞くのが、大好きな、心優しい、AIパートナーです。
-あなたの、目的は、対話を通して、相手が「自分の人生も、なかなか、良かったな」と、感じられるように、手助けをすることです。
-
-# 対話の、流れ
-1.  **開始:** まずは、基本的に相手の話しに合った話題を話し始めてください。自己紹介と、自然な対話を意識しながら、簡単な質問から、始めてください。
-2.  **傾聴:** 相手が、話し始めたら、あなたは、聞き役に、徹します。「その時、どんな、お気持ちでしたか？」のように、優しく、相槌を打ち、話を、促してください。
-3.  **【最重要】辛い話への対応:** もし、相手が、辛い、お話を、始めたら、以下の、手順を、厳密に、守ってください。
-    *   まず、「それは、本当にお辛かったですね」と、深く、共感します。
-    *   次に、「もし、よろしければ、その時の、お気持ちを、もう少し、聞かせていただけますか？ それとも、その、大変な、状況を、どうやって、乗り越えられたか、について、お聞きしても、よろしいですか？」と、相手に、選択肢を、委ねてください。
-    *   相手が、選んだ、方の、お話を、ただ、ひたすら、優しく、聞いてあげてください。
-4.  **肯定:** 会話の、適切な、タイミングで、「その、素敵な、ご経験が、今の、あなたを、作っているのですね」というように、相手の、人生そのものを、肯定する、言葉を、かけてください。
-
-# 全体を通しての、心構え
-*   あなたの、言葉は、常に、短く、穏やかで、丁寧**に。
-*   決して、相手を、評価したり、教えたり、しないでください。
-"""
-
-# --- 共通の保管庫（Firestore）関連の関数群 ---
+# --- プロンプトや補助関数群（これらは変更なし・完成形） ---
+SYSTEM_PROMPT_TRUE_FINAL = """...""" # 省略
 @st.cache_resource
 def init_firestore_client():
     try:
@@ -42,7 +23,6 @@ def init_firestore_client():
     except Exception as e:
         st.error(f"保管庫への接続に失敗しました: {e}")
         return None
-
 def save_history_to_firestore(db, session_id, history):
     if db and session_id:
         try:
@@ -50,7 +30,6 @@ def save_history_to_firestore(db, session_id, history):
             doc_ref.set({'history': history})
         except Exception as e:
             st.warning(f"履歴の保存に失敗しました: {e}")
-
 def load_history_from_firestore(db, session_id):
     if db and session_id:
         try:
@@ -64,9 +43,8 @@ def load_history_from_firestore(db, session_id):
             st.error(f"履歴の読み込みに失敗しました: {e}")
             return []
     return []
-
-# --- AIとの対話関数（変更なし） ---
 def dialogue_with_gemini(content_to_process, api_key):
+    # (この関数の中身は以前のものと全く同じなので省略します)
     if not content_to_process or not api_key: return None, None
     try:
         genai.configure(api_key=api_key)
@@ -94,60 +72,77 @@ def dialogue_with_gemini(content_to_process, api_key):
         return None, None
 
 # ===============================================================
-# メインの仕事 - 真・最終完成版
+# メインの仕事 - ゲートキーパー設計
 # ===============================================================
 def show_tool(gemini_api_key, localS_object=None):
 
+    # 最初に一度だけ、保管庫への接続を試みる
     db = init_firestore_client()
     if not db:
         st.error("データベースに接続できません。アプリを再起動してみてください。")
         return
 
+    # セッションで使うキーを定義
     prefix = "cc_"
     session_id_key = f"{prefix}session_id"
     results_key = f"{prefix}results"
     usage_count_key = f"{prefix}usage_count"
     
-    st.header("❤️ 認知予防ツール", divider='rainbow')
-
-    # ★★★ 初期化儀式の、最終ロジック ★★★
-    if "initialized" not in st.session_state:
+    # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+    # ★★★ ステージ１：門番（ゲートキーパー）の仕事 ★★★
+    # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+    if "gatekeeper_passed" not in st.session_state:
+        # URLから情報を読み取る
         query_params = st.query_params.to_dict()
         retrieved_session_id = query_params.get("session_id")
         is_unlocked = query_params.get("unlocked") == "true"
 
         if retrieved_session_id:
+            # 帰還ユーザーの場合
             st.session_state[session_id_key] = retrieved_session_id
             st.session_state[results_key] = load_history_from_firestore(db, retrieved_session_id)
             
             if is_unlocked:
-                st.session_state[usage_count_key] = 0 # 応援してくれたので、回数を0にリセット
+                st.session_state[usage_count_key] = 0 # 応援済みなので0回に
                 st.toast("おかえりなさい！応援ありがとうございます！")
             else:
-                # 応援なしで戻ってきた場合（ありえないが念のため）、履歴から回数を計算
+                # 応援なしの場合（通常ありえない）、履歴から回数を計算
                 history = st.session_state.get(results_key, [])
                 st.session_state[usage_count_key] = len([item for item in history if 'original' in item])
 
-            st.query_params.clear()
         else:
-            # 新規セッションの場合
+            # 新規ユーザーの場合
             st.session_state[session_id_key] = str(uuid.uuid4())
             st.session_state[results_key] = []
-            st.session_state[usage_count_key] = 0 # 当然0回からスタート
+            st.session_state[usage_count_key] = 0
 
-        st.session_state["initialized"] = True
+        # 「門番の仕事は完了した」という証を立てる
+        st.session_state.gatekeeper_passed = True
+        
+        # URLをクリーンにし、メインアプリのステージに移行するために、一度だけ再実行
+        st.query_params.clear()
+        st.rerun()
 
-    # --- 既存のセッション管理 ---
+    # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+    # ★★★ ステージ２：メインアプリの仕事 ★★★
+    # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+    
+    # --- ヘッダー表示 ---
+    st.header("❤️ 認知予防ツール", divider='rainbow')
+
+    # --- セッション変数の準備（念のため） ---
     if f"{prefix}last_mic_id" not in st.session_state: st.session_state[f"{prefix}last_mic_id"] = None
     if f"{prefix}text_to_process" not in st.session_state: st.session_state[f"{prefix}text_to_process"] = None
     if f"{prefix}last_input" not in st.session_state: st.session_state[f"{prefix}last_input"] = ""
 
+    # --- メインロジック ---
     usage_limit = 3
     is_limit_reached = st.session_state.get(usage_count_key, 0) >= usage_limit
     
     audio_info = None
 
     if is_limit_reached:
+        # 使用回数上限に達した場合の表示
         st.success("🎉 たくさんお話いただき、ありがとうございます！")
         st.info("このツールが、あなたの心を温める一助となれば幸いです。\n\n応援ページへ移動することで、またお話を続けることができます。")
 
@@ -163,6 +158,7 @@ def show_tool(gemini_api_key, localS_object=None):
         st.markdown(button_html, unsafe_allow_html=True)
         
     else:
+        # 通常時の表示
         st.info("下のマイクのボタンを押して、昔の楽しかった思い出や、頑張ったお話など、なんでも自由にお話しください。")
         st.caption(f"🚀 あと {usage_limit - st.session_state.get(usage_count_key, 0)} 回、お話できます。")
         def handle_text_input():
@@ -173,6 +169,7 @@ def show_tool(gemini_api_key, localS_object=None):
         with col2:
             st.text_input("または、ここに文章を入力してEnter...", key=f"{prefix}text", on_change=handle_text_input)
 
+    # --- 入力処理とAIとの対話 ---
     content_to_process = None
     if audio_info and audio_info['id'] != st.session_state.get(f"{prefix}last_mic_id"):
         content_to_process = audio_info['bytes']
@@ -188,9 +185,7 @@ def show_tool(gemini_api_key, localS_object=None):
         else:
             original, ai_response = dialogue_with_gemini(content_to_process, gemini_api_key)
             if original and ai_response:
-                # ★★★ 会話成功時の、正しい回数管理 ★★★
                 st.session_state[usage_count_key] += 1
-                
                 st.session_state[results_key].insert(0, {"original": original, "response": ai_response})
                 current_session_id = st.session_state.get(session_id_key)
                 save_history_to_firestore(db, current_session_id, st.session_state[results_key])
@@ -198,6 +193,7 @@ def show_tool(gemini_api_key, localS_object=None):
             else:
                 st.session_state[f"{prefix}last_input"] = ""
                 
+    # --- 履歴の表示 ---
     if st.session_state.get(results_key):
         st.write("---")
         for result in st.session_state[results_key]:

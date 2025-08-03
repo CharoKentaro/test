@@ -5,18 +5,23 @@ from google.api_core import exceptions
 import json
 
 # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-# ★★★【追放の儀式】アレルギー源である、異物は、召喚すら、しません ★★★
+# ★★★【治療の、第一歩】アレルギー源は、召喚すら、しません ★★★
 # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-# from streamlit_mic_recorder import mic_recorder  <-- この一行を、完全に、削除します。
+# from streamlit_mic_recorder import mic_recorder  <-- この一行は、存在してはなりません。
 
 # --- プロンプト ---
 SYSTEM_PROMPT_TRUE_FINAL = """
-# ...（プロンプトは変更なし）...
+# あなたの、役割
+あなたは、高齢者の方の、お話を聞くのが、大好きな、心優しい、AIパートナーです。
+あなたの、目的は、対話を通して、相手が「自分の人生も、なかなか、良かったな」と、感じられるように、手助けをすることです。
+# ...（プロンプトの中身は、変更ありません）...
+# 全体を通しての、心構え
+*   あなたの、言葉は、常に、短く、穏やかで、丁寧**に。
+*   決して、相手を、評価したり、教えたり、しないでください。
 """
 
-# --- 補助関数 ---
+# --- 補助関数（声の機能は、失われました） ---
 def dialogue_with_gemini(content_to_process, api_key):
-    # マイク機能がなくなったため、この関数は、シンプルになります。
     if not content_to_process or not api_key: return None, None
     try:
         genai.configure(api_key=api_key)
@@ -32,7 +37,7 @@ def dialogue_with_gemini(content_to_process, api_key):
         st.error(f"AI処理中に予期せぬエラーが発生しました: {e}")
         return None, None
 
-# --- メインの仕事 ---
+# --- メインの仕事（英雄は、右腕だけで、戦います） ---
 def show_tool(gemini_api_key, localS_object):
     
     localS = localS_object
@@ -70,7 +75,6 @@ def show_tool(gemini_api_key, localS_object):
         st.info("下の入力欄に、昔の楽しかった思い出や、頑張ったお話など、なんでも自由にご入力ください。")
         st.caption(f"🚀 あと {usage_limit - st.session_state.get(f'{prefix}usage_count', 0)} 回、お話できます。")
         
-        # ★★★【腕の治療】英雄は、もはや、声（マイク）を、失い、文字だけで、語ります ★★★
         def handle_text_input():
             st.session_state[f"{prefix}text_to_process"] = st.session_state.cc_text
         

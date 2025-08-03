@@ -2,7 +2,7 @@ import streamlit as st
 from streamlit_local_storage import LocalStorage
 import time
 # ★★★ 六人の、英雄たちが、ここに、集結します ★★★
-from tools import translator_tool, okozukai_recorder_tool, calendar_tool, gijiroku_tool, kensha_no_kioku_tool
+from tools import translator_tool, okozukai_recorder_tool, calendar_tool, gijiroku_tool, kensha_no_kioku_tool, ai_memory_partner_tool
 
 # --- アプリの基本設定 (変更なし) ---
 st.set_page_config(page_title="Multi-Tool Portal", page_icon="🚀", layout="wide")
@@ -15,7 +15,7 @@ with st.sidebar:
     # ★★★ 選択肢は、六つに ★★★
     tool_selection = st.radio(
         "利用するツールを選択してください:",
-        ("🤝 翻訳ツール", "💰 お小遣い管理", "📅 AI秘書", "📝 議事録作成", "🧠 賢者の記憶"),
+        ("🤝 翻訳ツール", "💰 お小遣い管理", "📅 AI秘書", "📝 議事録作成", "🧠 賢者の記憶", "❤️ 認知予防ツール"),
         key="tool_selection"
     )
     st.divider()
@@ -53,3 +53,5 @@ elif st.session_state.tool_selection == "📝 議事録作成":
     gijiroku_tool.show_tool(gemini_api_key=st.session_state.get('gemini_api_key', ''))
 elif st.session_state.tool_selection == "🧠 賢者の記憶":
     kensha_no_kioku_tool.show_tool(gemini_api_key=st.session_state.get('gemini_api_key', ''))
+elif st.session_state.tool_selection == "🧠 賢者の記憶":
+    tools/ai_memory_partner.show_tool(gemini_api_key=st.session_state.get('gemini_api_key', ''))

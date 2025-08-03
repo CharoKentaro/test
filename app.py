@@ -1,64 +1,68 @@
 import streamlit as st
-import os
+from streamlit_local_storage import LocalStorage
+import time
+# ★★★ 六人の、英雄たちが、ここに、集結します ★★★
+from tools import translator_tool, okozukai_recorder_tool, calendar_tool, gijiroku_tool, kensha_no_kioku_tool, ai_memory_partner_tool
 
-st.title("🕵️ 環境診断レポート")
+# --- アプリの基本設定 (変更なし) ---
+st.set_page_config(page_title="Multi-Tool Portal", page_icon="🚀", layout="wide")
 
-st.info(
-    "このアプリは、実行されている環境にどんなファイルやフォルダが見えているかを確認するためのものです。"
-)
+# --- サイドバー (最終形態) ---
+with st.sidebar:
+    st.title("🚀 Multi-Tool Portal")
+    st.divider()
 
-# --- 現在の作業フォルダを表示 ---
-try:
-    current_directory = os.getcwd()
-    st.header("1. 私が今いる場所（カレントディレクトリ）")
-    st.code(current_directory, language="bash")
-except Exception as e:
-    st.error(f"現在地の取得中にエラーが発生しました: {e}")
+    # ★★★ 選択肢は、六つに ★★★
+    if "tool_selection" not in st.session_state:
+        st.session_state.tool_selection = "🤝 翻訳ツール" # 初期値を設定
 
-# --- カレントディレクトリのファイルとフォルダを一覧表示 ---
-try:
-    st.header("2. 私のすぐ周りにあるファイルとフォルダ")
-    files_and_folders = os.listdir(".") # "." はカレントディレクトリを意味します
-    st.write(files_and_folders)
+    tool_selection = st.radio(
+        "利用するツールを選択してください:",
+        ("🤝 翻訳ツール", "💰 お小遣い管理", "📅 AI秘書", "📝 議事録作成", "🧠 賢者の記憶", "❤️ 認知予防ツール"),
+        key="tool_selection"
+    )
+    st.divider()
 
-    # "tools" フォルダが一覧にあれば、成功の印
-    if "tools" in files_and_folders:
-        st.success("✅ 「tools」フォルダが見つかりました！")
-    else:
-        st.error("❌ 致命的な問題：「tools」フォルダが見つかりません。これがエラーの根本原因です。")
-
-except Exception as e:
-    st.error(f"周囲のファイル確認中にエラーが発生しました: {e}")
-
-
-# --- "tools" フォルダの中身を一覧表示 ---
-try:
-    st.header("3. 「tools」フォルダの中身")
-    # "tools" フォルダへのパスを指定
-    tools_path = "./tools" 
-    
-    # そもそも "tools" フォルダが存在するかチェック
-    if os.path.isdir(tools_path):
-        tools_contents = os.listdir(tools_path)
-        st.write(tools_contents)
+    # --- APIキー管理 (Gemini一本化の、思想は、揺るがない) ---
+    localS = LocalStorage()
+    saved_key = localS.getItem("gemini_api_key")
+    gemini_default = saved_key if isinstance(saved_key, str) else ""
+    if 'gemini_api_key' not in st.session_state:
+        st.session_state.gemini_api_key = gemini_default
         
-        # __init__.py の存在チェック
-        if "__init__.py" in tools_contents:
-            st.success("✅ 「__init__.py」が見つかりました！パッケージとして認識できるはずです。")
-        else:
-            st.error("❌ 致命的な問題：「__init__.py」が見つかりません。これが原因でインポートに失敗しています。")
-            
-        # ai_memory_partner_tool.py の存在チェック
-        if "ai_memory_partner_tool.py" in tools_contents:
-            st.success("✅ 「ai_memory_partner_tool.py」も見つかりました。")
-        else:
-            st.warning("⚠️ 「ai_memory_partner_tool.py」が見つかりません。")
+    with st.expander("⚙️ APIキーの設定", expanded=not st.session_state.gemini_api_key):
+        with st.form("api_key_form", clear_on_submit=False):
+            api_key_input = st.text_input("Gemini APIキー", type="password", value=st.session_state.gemini_api_key)
+            col1, col2 = st.columns(2)
+            with col1: save_button = st.form_submit_button("💾 保存", use_container_width=True)
+            with col2: reset_button = st.form_submit_button("🔄 クリア", use_container_width=True)
 
-    else:
-        st.error("❌ 「tools」という名前のフォルダ自体が存在しないため、中身を確認できません。")
+    if save_button:
+        st.session_state.gemini_api_key = api_key_input
+        localS.setItem("gemini_api_key", st.session_state.gemini_api_key)
+        st.success("キーをブラウザに保存しました！"); time.sleep(1); st.rerun()
+    if reset_button:
+        localS.setItem("gemini_api_key", None)
+        st.session_state.gemini_api_key = ""
+        st.success("キーをクリアしました。"); time.sleep(1); st.rerun()
+        
+    st.divider()
+    st.markdown("""<div style="font-size: 0.9em;"><a href="https://aistudio.google.com/app/apikey" target="_blank">Gemini APIキーの取得はこちら</a></div>""", unsafe_allow_html=True)
 
-except Exception as e:
-    st.error(f"「tools」フォルダの中身を確認中にエラーが発生しました: {e}")
-
-st.divider()
-st.warning("この診断結果のスクリーンショットをAIに見せると、問題解決が早まる可能性があります。")
+# ★★★★★ 『偉大なる、仕分け人』の、最終契約書 ★★★★★
+if st.session_state.tool_selection == "🤝 翻訳ツール":
+    translator_tool.show_tool(gemini_api_key=st.session_state.get('gemini_api_key', ''))
+elif st.session_state.tool_selection == "💰 お小遣い管理":
+    okozukai_recorder_tool.show_tool(gemini_api_key=st.session_state.get('gemini_api_key', ''))
+elif st.session_state.tool_selection == "📅 AI秘書":
+    calendar_tool.show_tool(gemini_api_key=st.session_state.get('gemini_api_key', ''))
+elif st.session_state.tool_selection == "📝 議事録作成":
+    gijiroku_tool.show_tool(gemini_api_key=st.session_state.get('gemini_api_key', ''))
+elif st.session_state.tool_selection == "🧠 賢者の記憶":
+    kensha_no_kioku_tool.show_tool(gemini_api_key=st.session_state.get('gemini_api_key', ''))
+elif st.session_state.tool_selection == "❤️ 認知予防ツール":
+    # 2つの引数(APIキーとLocalStorageオブジェクト)を正しく渡します
+    ai_memory_partner_tool.show_tool(
+        gemini_api_key=st.session_state.get('gemini_api_key', ''),
+        localS_object=localS 
+    )

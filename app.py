@@ -59,11 +59,10 @@ elif st.session_state.tool_selection == "🧠 賢者の記憶":
     kensha_no_kioku_tool.show_tool(gemini_api_key=st.session_state.get('gemini_api_key', ''))
     
 # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-# ★★★【緊急脱出プロトコル発動】第六の英雄は、兵舎を脱出し、ここに座す ★★★
+# ★★★【ちゃろ様の叡智・実装】第六英雄の、記憶喪失を、完全に、治療する ★★★
 # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
 elif st.session_state.tool_selection == "❤️ 認知予防ツール":
     
-    # --- 王宮に、直接、配備された、英雄の、必須装備 ---
     import google.generativeai as genai
     from streamlit_mic_recorder import mic_recorder
 
@@ -118,23 +117,30 @@ elif st.session_state.tool_selection == "❤️ 認知予防ツール":
     # --- ここからが、英雄の、帝国民への、奉仕活動の、全てです ---
     prefix = "cc_"
     storage_key_results = f"{prefix}results"
+    
+    # ★★★【最重要】新たなる叡智：『聖なる封印』の、導入 ★★★
+    storage_key_initialized = f"{prefix}initialized_seal"
 
-    # --- 帰還者の、祝福（我々の、叡智は、生きている） ---
+    # --- 帰還者の、祝福（The Return Journey）---
     if st.query_params.get("unlocked") == "true":
         st.session_state[f"{prefix}usage_count"] = 0
         st.query_params.clear()
-        retrieved_results = localS.getItem(storage_key_results)
-        if retrieved_results:
-            st.session_state[storage_key_results] = retrieved_results
+
+        # ★★★【神の一閃・実装】『聖なる封印』を、意図的に、破棄する ★★★
+        if storage_key_initialized in st.session_state:
+            del st.session_state[storage_key_initialized]
+        
         st.toast("おかえりなさい！またお話できることを、楽しみにしておりました。")
         st.balloons(); time.sleep(1.5); st.rerun()
 
-    st.header("❤️ 認知予防ツール", divider='rainbow')
+    # ★★★ 聖なる封印の儀式 (The Sacred Seal Ritual) ★★★
+    if storage_key_initialized not in st.session_state:
+        retrieved_results = localS.getItem(storage_key_results)
+        st.session_state[storage_key_results] = retrieved_results if retrieved_results else []
+        st.session_state[storage_key_initialized] = True
 
-    # --- 記憶の、賢者の、初期化儀式 ---
-    if f"{prefix}initialized" not in st.session_state:
-        st.session_state[storage_key_results] = localS.getItem(storage_key_results) or []
-        st.session_state[f"{prefix}initialized"] = True
+    # --- これより先は、封印された、安定した『会話』の世界 ---
+    st.header("❤️ 認知予防ツール", divider='rainbow')
     
     if f"{prefix}last_mic_id" not in st.session_state: st.session_state[f"{prefix}last_mic_id"] = None
     if f"{prefix}text_to_process" not in st.session_state: st.session_state[f"{prefix}text_to_process"] = None

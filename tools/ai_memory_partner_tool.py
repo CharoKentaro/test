@@ -69,7 +69,7 @@ def show_tool(gemini_api_key, localS_object=None):
         st.markdown(f'<a href="{portal_url}" target="_blank">応援ページで「今日の合言葉」を確認する →</a>', unsafe_allow_html=True)
         st.divider()
 
-        password_input = st.text_input("ここに「今日の合言葉」を入力してください:", type="password")
+        password_input = st.text_input("ここに「今日の合言葉（4桁の数字）」を入力してください:", type="password")
         if st.button("お話を続ける"):
             JST = timezone(timedelta(hours=+9))
             today_int = int(datetime.now(JST).strftime('%Y%m%d'))

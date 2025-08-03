@@ -1,16 +1,15 @@
 # ===============================================================
-# ★★★ ai_memory_partner_tool.py ＜デイリーパスワード版＞ ★★★
+# ★★★ ai_memory_partner_tool.py ＜最終修正版＞ ★★★
 # ===============================================================
 import streamlit as st
 import google.generativeai as genai
 import time
-from datetime import datetime, timedelta, timezone # ★★★ 日付を扱う達人を召喚 ★★★
+from datetime import datetime, timedelta, timezone
 from streamlit_mic_recorder import mic_recorder
 
 # --- プロンプトや補助関数（省略） ---
 SYSTEM_PROMPT_TRUE_FINAL = """..."""
 def dialogue_with_gemini(content_to_process, api_key):
-    # ... (この関数は変更なし) ...
     if not content_to_process or not api_key: return None, None
     try:
         genai.configure(api_key=api_key)
@@ -36,14 +35,14 @@ def dialogue_with_gemini(content_to_process, api_key):
         return None, None
 
 # ===============================================================
-# メインの仕事 - 最終完成版
+# メインの仕事 - 最終修正版
 # ===============================================================
 def show_tool(gemini_api_key, localS_object=None):
 
     prefix = "cc_"
     results_key = f"{prefix}results"
     usage_count_key = f"{prefix}usage_count"
-    text_input_key = f"{prefix}text_input" # ★★★ テキスト入力のキーを定義
+    text_input_key = f"{prefix}text_input"
 
     if results_key not in st.session_state:
         st.session_state[results_key] = []
@@ -51,7 +50,6 @@ def show_tool(gemini_api_key, localS_object=None):
         st.session_state[usage_count_key] = 0
     if text_input_key not in st.session_state:
         st.session_state[text_input_key] = ""
-
 
     st.header("❤️ 認知予防ツール", divider='rainbow')
 
@@ -69,8 +67,6 @@ def show_tool(gemini_api_key, localS_object=None):
 
         password_input = st.text_input("ここに「今日の合言葉」を入力してください:", type="password")
         if st.button("お話を続ける"):
-            
-            # ★★★ 今日の正しい合言葉を自動生成 ★★★
             JST = timezone(timedelta(hours=+9))
             today_str = datetime.now(JST).strftime('%Y%m%d')
             secret_word = st.secrets.get("unlock_secret", "")
@@ -97,7 +93,6 @@ def show_tool(gemini_api_key, localS_object=None):
         with col1:
             audio_info = mic_recorder(start_prompt="🟢 話し始める", stop_prompt="🔴 話を聞いてもらう", key=f'{prefix}mic', format="webm")
         with col2:
-            # ★★★ キーを明確に指定 ★★★
             text_input = st.text_input("または、ここに文章を入力してEnter...", key=text_input_key)
             
         content_to_process = None
@@ -110,14 +105,15 @@ def show_tool(gemini_api_key, localS_object=None):
             if not gemini_api_key:
                 st.error("サイドバーでGemini APIキーを設定してください。")
             else:
-                original, ai_response = dialogue_with_gemini(content_to_process, api_key)
+                # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+                # ★★★ これが、最後の、たった一つの修正です ★★★
+                # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+                original, ai_response = dialogue_with_gemini(content_to_process, gemini_api_key)
+                
                 if original and ai_response:
                     st.session_state[usage_count_key] += 1
                     st.session_state[results_key].insert(0, {"original": original, "response": ai_response})
-                    
-                    # ★★★ 無限ループを防ぐための、最後の儀式 ★★★
-                    st.session_state[text_input_key] = "" # 入力欄を空にする
-                    
+                    st.session_state[text_input_key] = ""
                     st.rerun()
 
     if st.session_state.get(results_key) and not is_limit_reached:

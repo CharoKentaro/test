@@ -4,12 +4,10 @@ import time
 from google.api_core import exceptions
 import json
 
-# streamlit_mic_recorderのインポートをtry-catchで囲む（あなたの、素晴らしい、防護壁です）
-try:
-    from streamlit_mic_recorder import mic_recorder
-    MIC_RECORDER_AVAILABLE = True
-except ImportError:
-    MIC_RECORDER_AVAILABLE = False
+# ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+# ★★★【追放の儀式】アレルギー源である、異物は、召喚すら、しません ★★★
+# ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+# from streamlit_mic_recorder import mic_recorder  <-- この一行を、完全に、削除します。
 
 # --- プロンプト ---
 SYSTEM_PROMPT_TRUE_FINAL = """
@@ -18,24 +16,13 @@ SYSTEM_PROMPT_TRUE_FINAL = """
 
 # --- 補助関数 ---
 def dialogue_with_gemini(content_to_process, api_key):
-    # （あなたの、示してくださった、元の、完全な、関数コードが、ここにあると、仮定します）
+    # マイク機能がなくなったため、この関数は、シンプルになります。
     if not content_to_process or not api_key: return None, None
     try:
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel('gemini-1.5-flash-latest')
-        if isinstance(content_to_process, bytes):
-            with st.spinner("（あなたの声を、言葉に、変えています...）"):
-                audio_part = {"mime_type": "audio/webm", "data": content_to_process}
-                transcription_prompt = "この日本語の音声を、できる限り正確に、文字に書き起こしてください。書き起こした日本語テキストのみを回答してください。"
-                transcription_response = model.generate_content([transcription_prompt, audio_part])
-                processed_text = transcription_response.text.strip()
-            if not processed_text:
-                st.error("あなたの声を、言葉に、変えることができませんでした。もう一度お試しください。")
-                return None, None
-            original_input_display = f"{processed_text} (🎙️音声より)"
-        else:
-            processed_text = content_to_process
-            original_input_display = processed_text
+        processed_text = content_to_process
+        original_input_display = processed_text
         with st.spinner("（AIが、あなたのお話を、一生懸命聞いています...）"):
             request_contents = [SYSTEM_PROMPT_TRUE_FINAL, processed_text]
             response = model.generate_content(request_contents)
@@ -67,14 +54,12 @@ def show_tool(gemini_api_key, localS_object):
         st.session_state[storage_key_results] = localS.getItem(storage_key_results) or []
         st.session_state[f"{prefix}initialized"] = True
     
-    if f"{prefix}last_mic_id" not in st.session_state: st.session_state[f"{prefix}last_mic_id"] = None
     if f"{prefix}text_to_process" not in st.session_state: st.session_state[f"{prefix}text_to_process"] = None
     if f"{prefix}last_input" not in st.session_state: st.session_state[f"{prefix}last_input"] = ""
     if f"{prefix}usage_count" not in st.session_state: st.session_state[f"{prefix}usage_count"] = 0
 
     usage_limit = 3
     is_limit_reached = st.session_state.get(f"{prefix}usage_count", 0) >= usage_limit
-    audio_info = None
 
     if is_limit_reached:
         st.success("🎉 たくさんお話いただき、ありがとうございます！")
@@ -82,31 +67,21 @@ def show_tool(gemini_api_key, localS_object):
         portal_url = "https://pray-power-is-god-and-cocoro.com/free3/continue.html"
         st.link_button("応援ページに移動して、お話を続ける", portal_url, type="primary", use_container_width=True)
     else:
-        st.info("下のボタンを押して、昔の楽しかった思い出や、頑張ったお話など、なんでも自由にお話しください。")
+        st.info("下の入力欄に、昔の楽しかった思い出や、頑張ったお話など、なんでも自由にご入力ください。")
         st.caption(f"🚀 あと {usage_limit - st.session_state.get(f'{prefix}usage_count', 0)} 回、お話できます。")
         
-        # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-        # ★★★【ちゃろ師の、教え】パンドラの箱を、固く、閉ざし、世界を、守ります ★★★
-        # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-        with st.expander("マイクで話す、または、文章を、入力する", expanded=False): # <-- ここが、最後の、答えです
-            def handle_text_input():
-                st.session_state[f"{prefix}text_to_process"] = st.session_state.cc_text
-            
-            col1, col2 = st.columns([1, 2])
-            with col1:
-                if MIC_RECORDER_AVAILABLE:
-                    audio_info = mic_recorder(start_prompt="🟢 話し始める", stop_prompt="🔴 話を聞いてもらう", key=f'{prefix}mic', format="webm")
-                else:
-                    st.warning("マイク機能は、現在、ご利用いただけません。")
-
-            with col2:
-                st.text_input("または、ここに文章を入力してEnter...", key=f"{prefix}text", on_change=handle_text_input)
+        # ★★★【腕の治療】英雄は、もはや、声（マイク）を、失い、文字だけで、語ります ★★★
+        def handle_text_input():
+            st.session_state[f"{prefix}text_to_process"] = st.session_state.cc_text
+        
+        st.text_input(
+            "ここに文章を入力してEnter...", 
+            key=f"{prefix}text", 
+            on_change=handle_text_input
+        )
 
     content_to_process = None
-    if audio_info and audio_info['id'] != st.session_state.get(f"{prefix}last_mic_id"):
-        content_to_process = audio_info['bytes']
-        st.session_state[f"{prefix}last_mic_id"] = audio_info['id']
-    elif st.session_state.get(f"{prefix}text_to_process"):
+    if st.session_state.get(f"{prefix}text_to_process"):
         content_to_process = st.session_state.get(f"{prefix}text_to_process")
         st.session_state[f"{prefix}text_to_process"] = None
 

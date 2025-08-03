@@ -46,8 +46,6 @@ def dialogue_with_gemini(content_to_process, api_key):
             processed_text = content_to_process
             original_input_display = processed_text
         with st.spinner("（AIが、あなたのお話を、一生懸命聞いています...）"):
-            # ★★★ 会話履歴を考慮する場合はここに修正が必要ですが、まずは動かすことを優先します ★★★
-            # ひとまず、常にシステムプロンプトと最新の入力で対話を開始します
             request_contents = [SYSTEM_PROMPT_TRUE_FINAL, processed_text]
             response = model.generate_content(request_contents)
             ai_response_text = response.text
@@ -136,7 +134,6 @@ def show_tool(gemini_api_key, localS_object): # ★★★ 引数に、魔法使�
     # ★★★ 表示部分は、聖なる、石版から、復元された、記憶を、元に、描画される ★★★
     if st.session_state.get(storage_key_results):
         st.write("---")
-        # 新しい会話が上に来るように逆順で表示
         for result in st.session_state[storage_key_results]:
             with st.chat_message("user"):
                 st.write(result['original'])

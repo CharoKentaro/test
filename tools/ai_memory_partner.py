@@ -46,6 +46,8 @@ def dialogue_with_gemini(content_to_process, api_key):
             processed_text = content_to_process
             original_input_display = processed_text
         with st.spinner("（AIが、あなたのお話を、一生懸命聞いています...）"):
+            # ★★★ 会話履歴を考慮する場合はここに修正が必要ですが、まずは動かすことを優先します ★★★
+            # ひとまず、常にシステムプロンプトと最新の入力で対話を開始します
             request_contents = [SYSTEM_PROMPT_TRUE_FINAL, processed_text]
             response = model.generate_content(request_contents)
             ai_response_text = response.text
@@ -97,8 +99,10 @@ def show_tool(gemini_api_key, localS_object): # ★★★ 引数に、魔法使�
     else:
         st.info("下のマイクのボタンを押して、昔の楽しかった思い出や、頑張ったお話など、なんでも自由にお話しください。")
         st.caption(f"🚀 あと {usage_limit - st.session_state.get(f'{prefix}usage_count', 0)} 回、お話できます。")
+        
         def handle_text_input():
-            st.session_state[f"{prefix}text_to_process"] = st.session_state.cc_text
+            st.session_state[f"{prefix}text_to_process"] = st.session_state.get(f"{prefix}text", "")
+
         col1, col2 = st.columns([1, 2])
         with col1:
             audio_info = mic_recorder(start_prompt="🟢 話し始める", stop_prompt="🔴 話を聞いてもらう", key=f'{prefix}mic', format="webm")
@@ -127,11 +131,12 @@ def show_tool(gemini_api_key, localS_object): # ★★★ 引数に、魔法使�
                 localS.setItem(storage_key_results, st.session_state[storage_key_results])
                 st.rerun()
             else:
-                st.session_state[f"{prefix}last_input"] = ""
+                st.session_state[f"{prefix}last_input"] = "" # 失敗した場合は入力をリセット
 
     # ★★★ 表示部分は、聖なる、石版から、復元された、記憶を、元に、描画される ★★★
     if st.session_state.get(storage_key_results):
         st.write("---")
+        # 新しい会話が上に来るように逆順で表示
         for result in st.session_state[storage_key_results]:
             with st.chat_message("user"):
                 st.write(result['original'])
@@ -143,4 +148,4 @@ def show_tool(gemini_api_key, localS_object): # ★★★ 引数に、魔法使�
             st.session_state[f"{prefix}last_input"] = ""
             # ★★★ 『記憶の、賢者』の、消去儀式（石版と、その場限りの、記憶を、完全に、同期させる） ★★★
             localS.setItem(storage_key_results, [])
-            st.rerun()
+            st.success("会話の履歴をクリアしました。"); time.sleep(1); st.rerun()

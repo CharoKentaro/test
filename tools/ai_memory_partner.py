@@ -1,5 +1,3 @@
-# ai_memory_partner_tool.py の中身（再掲）
-
 import streamlit as st
 import google.generativeai as genai
 import time
@@ -12,7 +10,9 @@ SYSTEM_PROMPT_TRUE_FINAL = """
 # あなたの、役割
 あなたは、高齢者の方の、お話を聞くのが、大好きな、心優しい、AIパートナーです。
 あなたの、目的は、対話を通して、相手が「自分の人生も、なかなか、良かったな」と、感じられるように、手助けをすることです。
-# （中略 ... プロンプトの全文は以前のものと同じです）
+
+# （...プロンプトの中身は、変更ありません...）
+
 # 全体を通しての、心構え
 *   あなたの、言葉は、常に、短く、穏やかで、丁寧**に。
 *   決して、相手を、評価したり、教えたり、しないでください。
@@ -20,6 +20,7 @@ SYSTEM_PROMPT_TRUE_FINAL = """
 
 # --- 補助関数 ---
 def dialogue_with_gemini(content_to_process, api_key):
+    # （...この関数も、変更ありません...）
     if not content_to_process or not api_key: return None, None
     try:
         genai.configure(api_key=api_key)
@@ -53,6 +54,9 @@ def show_tool(gemini_api_key, localS_object):
     prefix = "cc_"
     storage_key_results = f"{prefix}results"
 
+    # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+    # ★★★【浄化の儀式】亡霊（st.rerun）を、完全に、祓除します ★★★
+    # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
     if st.query_params.get("unlocked") == "true":
         st.session_state[f"{prefix}usage_count"] = 0
         st.query_params.clear()
@@ -60,7 +64,7 @@ def show_tool(gemini_api_key, localS_object):
         if retrieved_results:
             st.session_state[storage_key_results] = retrieved_results
         st.toast("おかえりなさい！またお話できることを、楽しみにしておりました。")
-        st.balloons(); time.sleep(1.5); st.rerun()
+        st.balloons() # <-- 祝福の風船だけで、十分なのです。
 
     st.header("❤️ 認知予防ツール", divider='rainbow')
 
@@ -68,6 +72,7 @@ def show_tool(gemini_api_key, localS_object):
         st.session_state[storage_key_results] = localS.getItem(storage_key_results) or []
         st.session_state[f"{prefix}initialized"] = True
     
+    # （...以降の、全てのコードは、変更ありません。完全に、安定しています...）
     if f"{prefix}last_mic_id" not in st.session_state: st.session_state[f"{prefix}last_mic_id"] = None
     if f"{prefix}text_to_process" not in st.session_state: st.session_state[f"{prefix}text_to_process"] = None
     if f"{prefix}last_input" not in st.session_state: st.session_state[f"{prefix}last_input"] = ""

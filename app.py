@@ -54,4 +54,4 @@ elif st.session_state.tool_selection == "📝 議事録作成":
 elif st.session_state.tool_selection == "🧠 賢者の記憶":
     kensha_no_kioku_tool.show_tool(gemini_api_key=st.session_state.get('gemini_api_key', ''))
 elif st.session_state.tool_selection == "🧠 賢者の記憶":
-    tools/ai_memory_partner.show_tool(gemini_api_key=st.session_state.get('gemini_api_key', ''))
+    ai_memory_partner_tool.show_tool(gemini_api_key=st.session_state.get('gemini_api_key', ''))

@@ -1,5 +1,5 @@
 # ===============================================================
-# ★★★ ai_memory_partner_tool.py ＜最終修正版＞ ★★★
+# ★★★ ai_memory_partner_tool.py ＜最後のコード＞ ★★★
 # ===============================================================
 import streamlit as st
 import google.generativeai as genai
@@ -35,15 +35,16 @@ def dialogue_with_gemini(content_to_process, api_key):
         return None, None
 
 # ===============================================================
-# メインの仕事 - 最終修正版
+# メインの仕事 - 最後のコード
 # ===============================================================
 def show_tool(gemini_api_key, localS_object=None):
 
     prefix = "cc_"
     results_key = f"{prefix}results"
     usage_count_key = f"{prefix}usage_count"
-    text_input_key = f"{prefix}text_input"
+    text_input_key = f"{prefix}text_input" # テキスト入力ウィジェット専用のキー
 
+    # --- セッションの初期化 ---
     if results_key not in st.session_state:
         st.session_state[results_key] = []
     if usage_count_key not in st.session_state:
@@ -51,12 +52,20 @@ def show_tool(gemini_api_key, localS_object=None):
     if text_input_key not in st.session_state:
         st.session_state[text_input_key] = ""
 
+    # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+    # ★★★ これが、新しい、入力処理のロジックです ★★★
+    # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+    
+    # マイクとテキストの入力を、まずウィジェットとして定義する
     st.header("❤️ 認知予防ツール", divider='rainbow')
-
     usage_limit = 3
     is_limit_reached = st.session_state.get(usage_count_key, 0) >= usage_limit
     
+    # 処理すべき内容を保持する変数
+    content_to_process = None
+    
     if is_limit_reached:
+        # アンロック・モード
         st.success("🎉 たくさんお話いただき、ありがとうございます！")
         st.info("このツールが、あなたの心を温める一助となれば幸いです。")
         st.warning("お話を続けるには、応援ページで「今日の合言葉」を確認し、入力してください。")
@@ -77,13 +86,12 @@ def show_tool(gemini_api_key, localS_object=None):
                 st.balloons()
                 st.success("ありがとうございます！お話を続けましょう。")
                 time.sleep(2)
-                st.rerun()
+                st.rerun() # ここでのrerunは、モード切替のため安全
             else:
                 st.error("合言葉が違うようです。応援ページで、もう一度ご確認ください。")
-
     else:
+        # 通常会話モード
         st.info("下のマイクのボタンを押して、昔の楽しかった思い出や、頑張ったお話など、なんでも自由にお話しください。")
-        
         try:
             remaining_talks = usage_limit - st.session_state.get(usage_count_key, 0)
             st.caption(f"🚀 あと {remaining_talks} 回、お話できます。")
@@ -93,29 +101,34 @@ def show_tool(gemini_api_key, localS_object=None):
         with col1:
             audio_info = mic_recorder(start_prompt="🟢 話し始める", stop_prompt="🔴 話を聞いてもらう", key=f'{prefix}mic', format="webm")
         with col2:
-            text_input = st.text_input("または、ここに文章を入力してEnter...", key=text_input_key)
-            
-        content_to_process = None
+            # テキスト入力は、on_changeを使わず、シンプルに定義
+            st.text_input("または、ここに文章を入力してEnter...", key=text_input_key)
+        
+        # --- 入力があったかどうかを判定 ---
+        # マイク入力
         if audio_info:
             content_to_process = audio_info['bytes']
-        elif text_input:
-            content_to_process = text_input
+        # テキスト入力
+        elif st.session_state[text_input_key]:
+            # ① 内容をコピーする
+            content_to_process = st.session_state[text_input_key]
+            # ② ウィジェットの状態を、ただちにクリアする
+            st.session_state[text_input_key] = ""
 
-        if content_to_process:
-            if not gemini_api_key:
-                st.error("サイドバーでGemini APIキーを設定してください。")
-            else:
-                # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-                # ★★★ これが、最後の、たった一つの修正です ★★★
-                # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-                original, ai_response = dialogue_with_gemini(content_to_process, gemini_api_key)
-                
-                if original and ai_response:
-                    st.session_state[usage_count_key] += 1
-                    st.session_state[results_key].insert(0, {"original": original, "response": ai_response})
-                    st.session_state[text_input_key] = ""
-                    st.rerun()
+    # ★★★ AIとの対話は、すべてのウィジェット描画が終わった後に行う ★★★
+    if content_to_process:
+        if not gemini_api_key:
+            st.error("サイドバーでGemini APIキーを設定してください。")
+        else:
+            # ③ コピーした内容で、処理を行う
+            original, ai_response = dialogue_with_gemini(content_to_process, gemini_api_key)
+            if original and ai_response:
+                st.session_state[usage_count_key] += 1
+                st.session_state[results_key].insert(0, {"original": original, "response": ai_response})
+                # ★★★ もう、rerunはしない ★★★
+                st.experimental_rerun() # st.rerunの代替として、より安全な再実行を試みる
 
+    # --- 履歴の表示 ---
     if st.session_state.get(results_key) and not is_limit_reached:
         st.write("---")
         for result in st.session_state[results_key]:
@@ -124,4 +137,4 @@ def show_tool(gemini_api_key, localS_object=None):
         if st.button("会話の履歴をクリア", key=f"{prefix}clear_history"):
             st.session_state[results_key] = []
             st.session_state[usage_count_key] = 0
-            st.rerun()
+            st.rerun() # ここでのrerunは、ユーザーのアクション起因なので安全

@@ -1,8 +1,12 @@
 import streamlit as st
 from streamlit_local_storage import LocalStorage
 import time
-# ★★★ 六人の、英雄たちが、ここに、集結します ★★★
-from tools import translator_tool, okozukai_recorder_tool, calendar_tool, gijiroku_tool, kensha_no_kioku_tool
+
+# ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+# ★★★ 六人の、英雄たちが、ここに、集結します (修正箇所) ★★★
+# ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+# 新たなる英雄、『ai_memory_partner_tool』を、召喚リストに加えます
+from tools import translator_tool, okozukai_recorder_tool, calendar_tool, gijiroku_tool, kensha_no_kioku_tool, ai_memory_partner_tool
 
 # --- アプリの基本設定 (変更なし) ---
 st.set_page_config(page_title="Multi-Tool Portal", page_icon="🚀", layout="wide")
@@ -46,7 +50,10 @@ with st.sidebar:
 if st.session_state.tool_selection == "🤝 翻訳ツール":
     translator_tool.show_tool(gemini_api_key=st.session_state.get('gemini_api_key', ''))
 elif st.session_state.tool_selection == "💰 お小遣い管理":
-    okozukai_recorder_tool.show_tool(gemini_api_key=st.session_state.get('gemini_api_key', ''))
+    # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+    # ★★★ ここも、魔法使いを、派遣する必要が、あります (修正箇所) ★★★
+    # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+    okozukai_recorder_tool.show_tool(localS_object=localS)
 elif st.session_state.tool_selection == "📅 AI秘書":
     calendar_tool.show_tool(gemini_api_key=st.session_state.get('gemini_api_key', ''))
 elif st.session_state.tool_selection == "📝 議事録作成":
@@ -54,4 +61,7 @@ elif st.session_state.tool_selection == "📝 議事録作成":
 elif st.session_state.tool_selection == "🧠 賢者の記憶":
     kensha_no_kioku_tool.show_tool(gemini_api_key=st.session_state.get('gemini_api_key', ''))
 elif st.session_state.tool_selection == "❤️ 認知予防ツール":
-    ai_memory_partner_tool.show_tool(gemini_api_key=st.session_state.get('gemini_api_key', ''))
+    # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+    # ★★★ 王から、魔法使いを、派遣する、という契約を、果たします (修正箇所) ★★★
+    # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+    ai_memory_partner_tool.show_tool(gemini_api_key=st.session_state.get('gemini_api_key', ''), localS_object=localS)

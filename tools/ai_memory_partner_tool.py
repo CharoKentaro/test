@@ -1,5 +1,5 @@
 # ===============================================================
-# ★★★ ai_memory_partner_tool.py ＜Read Once 設計版＞ ★★★
+# ★★★ ai_memory_partner_tool.py ＜修正版＞ ★★★
 # ===============================================================
 import streamlit as st
 import google.generativeai as genai
@@ -10,9 +10,9 @@ from google.oauth2 import service_account
 import json
 from streamlit_mic_recorder import mic_recorder
 
-# --- プロンプトや補助関数群（これらは変更なし・完成形） ---
-# （コードを簡潔にするため、ここでは省略します。実際には元のコードのままです）
+# --- プロンプトや補助関数群（変更なし） ---
 SYSTEM_PROMPT_TRUE_FINAL = """...""" 
+
 @st.cache_resource
 def init_firestore_client():
     try:
@@ -24,6 +24,7 @@ def init_firestore_client():
     except Exception as e:
         st.error(f"保管庫への接続に失敗しました: {e}")
         return None
+
 def save_history_to_firestore(db, session_id, history):
     if db and session_id:
         try:
@@ -31,6 +32,7 @@ def save_history_to_firestore(db, session_id, history):
             doc_ref.set({'history': history})
         except Exception as e:
             st.warning(f"履歴の保存に失敗しました: {e}")
+
 def load_history_from_firestore(db, session_id):
     if db and session_id:
         try:
@@ -44,8 +46,10 @@ def load_history_from_firestore(db, session_id):
             st.error(f"履歴の読み込みに失敗しました: {e}")
             return []
     return []
+
 def dialogue_with_gemini(content_to_process, api_key):
-    if not content_to_process or not api_key: return None, None
+    if not content_to_process or not api_key: 
+        return None, None
     try:
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel('gemini-1.5-flash-latest')
@@ -72,7 +76,7 @@ def dialogue_with_gemini(content_to_process, api_key):
         return None, None
 
 # ===============================================================
-# メインの仕事 - 「Read Once, Trust Session State」設計
+# メインの仕事 - 修正版
 # ===============================================================
 def show_tool(gemini_api_key, localS_object=None):
 
@@ -86,40 +90,43 @@ def show_tool(gemini_api_key, localS_object=None):
     session_id_key = f"{prefix}session_id"
     results_key = f"{prefix}results"
     usage_count_key = f"{prefix}usage_count"
+    initialized_key = f"{prefix}initialized"  # ★★★ 初期化フラグを追加 ★★★
     
     # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-    # ★★★ 「Read Once」の神聖な儀式 ★★★
+    # ★★★ 修正された「Read Once」処理 ★★★
     # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-    # URLパラメータは、セッションが初期化されていない時に、一度だけ読む
-    if session_id_key not in st.session_state:
+    
+    # 初期化フラグがない場合のみ、URLパラメータを読む
+    if not st.session_state.get(initialized_key, False):
         query_params = st.query_params.to_dict()
         retrieved_session_id = query_params.get("session_id")
         is_unlocked = query_params.get("unlocked") == "true"
 
         if retrieved_session_id:
-            # 帰還ユーザーの場合、URLから状態を復元し、セッションに聖別する
+            # 帰還ユーザーの場合
             st.session_state[session_id_key] = retrieved_session_id
             history = load_history_from_firestore(db, retrieved_session_id)
             st.session_state[results_key] = history
             
             if is_unlocked:
-                st.session_state[usage_count_key] = 0
+                st.session_state[usage_count_key] = 0  # unlocked=trueの場合、使用回数をリセット
                 st.toast("おかえりなさい！応援ありがとうございます！")
             else:
                 st.session_state[usage_count_key] = len([item for item in history if 'original' in item])
-            
-            # ★★★ 聖別の儀が済んだら、URLは即座に浄化する ★★★
-            # これにより、st.rerunが呼ばれても、このブロックは二度と実行されない
-            st.query_params.clear()
-            
         else:
-            # 新規ユーザーの場合、セッションをゼロから作成する
+            # 新規ユーザーの場合
             st.session_state[session_id_key] = str(uuid.uuid4())
             st.session_state[results_key] = []
             st.session_state[usage_count_key] = 0
 
-    # --- これ以降の処理は、すべて信頼できる st.session_state のみを使用する ---
+        # ★★★ 初期化完了をマーク ★★★
+        st.session_state[initialized_key] = True
+        
+        # ★★★ URLクリアはここで一度だけ実行 ★★★
+        if query_params:
+            st.query_params.clear()
 
+    # --- 以降の処理（変更なし） ---
     st.header("❤️ 認知予防ツール", divider='rainbow')
 
     usage_limit = 3
@@ -167,8 +174,10 @@ def show_tool(gemini_api_key, localS_object=None):
     if st.session_state.get(results_key):
         st.write("---")
         for result in st.session_state[results_key]:
-            with st.chat_message("user"): st.write(result['original'])
-            with st.chat_message("assistant"): st.write(result['response'])
+            with st.chat_message("user"): 
+                st.write(result['original'])
+            with st.chat_message("assistant"): 
+                st.write(result['response'])
         if st.button("会話の履歴をクリア", key=f"{prefix}clear_history"):
             st.session_state[results_key] = []
             st.session_state[usage_count_key] = 0

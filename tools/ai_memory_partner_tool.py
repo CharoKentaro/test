@@ -1,41 +1,21 @@
 # ===============================================================
-# ★★★ ai_memory_partner_tool.py ＜アルティメット・ギャンビット版＞ ★★★
+# ★★★ ai_memory_partner_tool.py ＜メタ思考アーキテクト版＞ ★★★
 # ===============================================================
 import streamlit as st
 import google.generativeai as genai
 import time
-import uuid 
-from google.cloud import firestore 
-from google.oauth2 import service_account
-import json
+
+# ★★★ この設計では、外部連携ライブラリは不要！シンプル・イズ・ベスト ★★★
+# import uuid 
+# from google.cloud import firestore 
+# from google.oauth2 import service_account
+# import json
 from streamlit_mic_recorder import mic_recorder
 
-# --- プロンプトや補助関数群（省略） ---
-SYSTEM_PROMPT_TRUE_FINAL = """..."""
-@st.cache_resource
-def init_firestore_client():
-    try:
-        creds_json_str = st.secrets["firebase_credentials"]
-        creds_dict = json.loads(creds_json_str)
-        credentials = service_account.Credentials.from_service_account_info(creds_dict)
-        db = firestore.Client(credentials=credentials)
-        return db
-    except: return None
-def save_history_to_firestore(db, session_id, history):
-    try:
-        if db and session_id:
-            doc_ref = db.collection('conversations').document(session_id)
-            doc_ref.set({'history': history})
-    except: pass
-def load_history_from_firestore(db, session_id):
-    try:
-        if db and session_id:
-            doc_ref = db.collection('conversations').document(session_id)
-            doc = doc_ref.get()
-            if doc.exists: return doc.to_dict().get('history', [])
-    except: return []
-    return []
+# --- プロンプトや補助関数群（変更なし・簡潔化のため省略） ---
+SYSTEM_PROMPT_TRUE_FINAL = """...""" 
 def dialogue_with_gemini(content_to_process, api_key):
+    # (この関数の中身は以前のものと全く同じなので省略します)
     if not content_to_process or not api_key: return None, None
     try:
         genai.configure(api_key=api_key)
@@ -61,77 +41,70 @@ def dialogue_with_gemini(content_to_process, api_key):
         return None, None
 
 # ===============================================================
-# メインの仕事 - アルティメット・ギャンビット
+# メインの仕事 - 新しい体験のデザイン
 # ===============================================================
-def show_tool(gemini_api_key, localS_object): # ★★★ localS を正しく受け取る
-
-    db = init_firestore_client()
-    if not db:
-        st.error("データベースに接続できません。アプリを再起動してみてください。")
-        return
+def show_tool(gemini_api_key, localS_object=None): # localS_objectも不要
 
     # --- セッションキー定義 ---
     prefix = "cc_"
-    session_id_key = f"{prefix}session_id"
     results_key = f"{prefix}results"
     usage_count_key = f"{prefix}usage_count"
-    
-    # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-    # ★★★ 「一時的な通行証」を使った、聖別の儀 ★★★
-    # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-    if session_id_key not in st.session_state:
-        # LocalStorageから通行証(session_id)を探す
-        retrieved_session_id = localS_object.getItem(session_id_key)
-        
-        if retrieved_session_id:
-            # 通行証があった場合 = 帰還ユーザー
-            st.session_state[session_id_key] = retrieved_session_id
-            history = load_history_from_firestore(db, retrieved_session_id)
-            st.session_state[results_key] = history
-            st.session_state[usage_count_key] = 0 # 帰還者は無条件で0回に
-            st.toast("おかえりなさい！応援ありがとうございます！")
-            
-            # ★★★ 使用済みの通行証は、即座に破棄する ★★★
-            localS_object.removeItem(session_id_key)
-        else:
-            # 通行証がなかった場合 = 新規ユーザー
-            st.session_state[session_id_key] = str(uuid.uuid4())
-            st.session_state[results_key] = []
-            st.session_state[usage_count_key] = 0
+
+    # --- セッションの初期化（シンプル版） ---
+    if results_key not in st.session_state:
+        st.session_state[results_key] = []
+        st.session_state[usage_count_key] = 0
 
     st.header("❤️ 認知予防ツール", divider='rainbow')
 
+    # --- メインロジック ---
     usage_limit = 3
     is_limit_reached = st.session_state.get(usage_count_key, 0) >= usage_limit
     
+    # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+    # ★★★ ここが、新しい「運命の分岐」です ★★★
+    # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
     if is_limit_reached:
-        # ★★★ 旅立ちの儀 ★★★
+        # ★★★ 聖域（アンロック・モード）の表示 ★★★
         st.success("🎉 たくさんお話いただき、ありがとうございます！")
-        st.info("このツールが、あなたの心を温める一助となれば幸いです。\n\n応援ページへ移動することで、またお話を続けることができます。")
-
-        current_session_id = st.session_state[session_id_key]
+        st.info("このツールが、あなたの心を温める一助となれば幸いです。")
+        st.warning("お話を続けるには、応援ページで「今日の合言葉」を確認し、入力してください。")
         
-        # 1. 履歴をFirebaseに保存する
-        save_history_to_firestore(db, current_session_id, st.session_state[results_key])
-        # 2. 通行証をLocalStorageに書き込む
-        localS_object.setItem(session_id_key, current_session_id)
-        
+        # 応援ページへのただのリンク
         portal_url = "https://pray-power-is-god-and-cocoro.com/free3/continue.html"
-        button_html = f'<a href="{portal_url}" target="_self" style="display: inline-block; padding: 0.75rem 1rem; background-color: #28a745; color: white; text-decoration: none; border-radius: 0.5rem; font-weight: bold; text-align: center; width: 95%;">応援ページに移動して、お話を続ける</a>'
-        st.markdown(button_html, unsafe_allow_html=True)
-    
+        st.markdown(f'<a href="{portal_url}" target="_blank">応援ページで「今日の合言葉」を確認する →</a>', unsafe_allow_html=True)
+        st.divider()
+
+        # 合言葉の入力フォーム
+        password_input = st.text_input("ここに「今日の合言葉」を入力してください:", type="password")
+        if st.button("お話を続ける"):
+            # Secretsから正しい合言葉を取得
+            correct_password = st.secrets.get("unlock_password", "")
+            if password_input == correct_password:
+                st.session_state[usage_count_key] = 0
+                st.balloons()
+                st.success("ありがとうございます！お話を続けましょう。")
+                time.sleep(2)
+                st.rerun()
+            else:
+                st.error("合言葉が違うようです。応援ページで、もう一度ご確認ください。")
+
     else:
-        # 通常のアプリ動作
+        # ★★★ 通常の会話モード ★★★
         st.info("下のマイクのボタンを押して、昔の楽しかった思い出や、頑張ったお話など、なんでも自由にお話しください。")
         st.caption(f"🚀 あと {usage_limit - st.session_state.get(usage_count_key, 0)} 回、お話できます。")
         
         col1, col2 = st.columns([1, 2])
-        with col1: audio_info = mic_recorder(start_prompt="🟢 話し始める", stop_prompt="🔴 話を聞いてもらう", key=f'{prefix}mic', format="webm")
-        with col2: text_input = st.text_input("または、ここに文章を入力してEnter...", key=f"{prefix}text_input")
+        with col1:
+            audio_info = mic_recorder(start_prompt="🟢 話し始める", stop_prompt="🔴 話を聞いてもらう", key=f'{prefix}mic', format="webm")
+        with col2:
+            text_input = st.text_input("または、ここに文章を入力してEnter...", key=f"{prefix}text_input")
             
         content_to_process = None
-        if audio_info: content_to_process = audio_info['bytes']
-        elif text_input: content_to_process = text_input
+        if audio_info:
+            content_to_process = audio_info['bytes']
+        elif text_input:
+            content_to_process = text_input
 
         if content_to_process:
             if not gemini_api_key:
@@ -141,15 +114,20 @@ def show_tool(gemini_api_key, localS_object): # ★★★ localS を正しく受
                 if original and ai_response:
                     st.session_state[usage_count_key] += 1
                     st.session_state[results_key].insert(0, {"original": original, "response": ai_response})
+                    # ★★★ Firestoreへの保存は、ここでは不要！セッション内で完結 ★★★
                     st.rerun()
 
+    # --- 履歴の表示（変更なし） ---
     if st.session_state.get(results_key):
-        st.write("---")
-        for result in st.session_state[results_key]:
-            with st.chat_message("user"): st.write(result['original'])
-            with st.chat_message("assistant"): st.write(result['response'])
-        if st.button("会話の履歴をクリア", key=f"{prefix}clear_history"):
-            st.session_state[results_key] = []
-            st.session_state[usage_count_key] = 0
-            save_history_to_firestore(db, st.session_state[session_id_key], [])
-            st.rerun()
+        # アンロックモードでは履歴を表示しないようにする
+        if not is_limit_reached:
+            st.write("---")
+            for result in st.session_state[results_key]:
+                with st.chat_message("user"): 
+                    st.write(result['original'])
+                with st.chat_message("assistant"): 
+                    st.write(result['response'])
+            if st.button("会話の履歴をクリア", key=f"{prefix}clear_history"):
+                st.session_state[results_key] = []
+                st.session_state[usage_count_key] = 0
+                st.rerun()

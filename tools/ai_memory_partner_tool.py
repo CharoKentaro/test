@@ -1,5 +1,5 @@
 # ===============================================================
-# ★★★ ai_memory_partner_tool.py ＜最終完成版＞ ★★★
+# ★★★ ai_memory_partner_tool.py ＜真・最終完成版＞ ★★★
 # ===============================================================
 import streamlit as st
 import google.generativeai as genai
@@ -94,7 +94,7 @@ def dialogue_with_gemini(content_to_process, api_key):
         return None, None
 
 # ===============================================================
-# メインの仕事 - 最終完成版
+# メインの仕事 - 真・最終完成版
 # ===============================================================
 def show_tool(gemini_api_key, localS_object=None):
 
@@ -110,9 +110,7 @@ def show_tool(gemini_api_key, localS_object=None):
     
     st.header("❤️ 認知予防ツール", divider='rainbow')
 
-    # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-    # ★★★ これが、初期化儀式の最終形態です！ ★★★
-    # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+    # ★★★ 初期化儀式の、最終ロジック ★★★
     if "initialized" not in st.session_state:
         query_params = st.query_params.to_dict()
         retrieved_session_id = query_params.get("session_id")
@@ -123,13 +121,19 @@ def show_tool(gemini_api_key, localS_object=None):
             st.session_state[results_key] = load_history_from_firestore(db, retrieved_session_id)
             
             if is_unlocked:
-                st.session_state[usage_count_key] = 0 # 使用回数をリセット
+                st.session_state[usage_count_key] = 0 # 応援してくれたので、回数を0にリセット
                 st.toast("おかえりなさい！応援ありがとうございます！")
-            
-            st.query_params.clear() # 無限ループを防ぐため、URLからパラメータを削除
+            else:
+                # 応援なしで戻ってきた場合（ありえないが念のため）、履歴から回数を計算
+                history = st.session_state.get(results_key, [])
+                st.session_state[usage_count_key] = len([item for item in history if 'original' in item])
+
+            st.query_params.clear()
         else:
+            # 新規セッションの場合
             st.session_state[session_id_key] = str(uuid.uuid4())
             st.session_state[results_key] = []
+            st.session_state[usage_count_key] = 0 # 当然0回からスタート
 
         st.session_state["initialized"] = True
 
@@ -137,9 +141,6 @@ def show_tool(gemini_api_key, localS_object=None):
     if f"{prefix}last_mic_id" not in st.session_state: st.session_state[f"{prefix}last_mic_id"] = None
     if f"{prefix}text_to_process" not in st.session_state: st.session_state[f"{prefix}text_to_process"] = None
     if f"{prefix}last_input" not in st.session_state: st.session_state[f"{prefix}last_input"] = ""
-    if usage_count_key not in st.session_state:
-        history = st.session_state.get(results_key, [])
-        st.session_state[usage_count_key] = len([item for item in history if 'original' in item])
 
     usage_limit = 3
     is_limit_reached = st.session_state.get(usage_count_key, 0) >= usage_limit
@@ -172,7 +173,6 @@ def show_tool(gemini_api_key, localS_object=None):
         with col2:
             st.text_input("または、ここに文章を入力してEnter...", key=f"{prefix}text", on_change=handle_text_input)
 
-    # --- 以降の処理（content_to_process, AIとの対話, 表示部分）は変更なし ---
     content_to_process = None
     if audio_info and audio_info['id'] != st.session_state.get(f"{prefix}last_mic_id"):
         content_to_process = audio_info['bytes']
@@ -180,6 +180,7 @@ def show_tool(gemini_api_key, localS_object=None):
     elif st.session_state.get(f"{prefix}text_to_process"):
         content_to_process = st.session_state.get(f"{prefix}text_to_process")
         st.session_state[f"{prefix}text_to_process"] = None
+
     if content_to_process and content_to_process != st.session_state.get(f"{prefix}last_input"):
         st.session_state[f"{prefix}last_input"] = content_to_process
         if not gemini_api_key:
@@ -187,13 +188,16 @@ def show_tool(gemini_api_key, localS_object=None):
         else:
             original, ai_response = dialogue_with_gemini(content_to_process, gemini_api_key)
             if original and ai_response:
+                # ★★★ 会話成功時の、正しい回数管理 ★★★
                 st.session_state[usage_count_key] += 1
+                
                 st.session_state[results_key].insert(0, {"original": original, "response": ai_response})
                 current_session_id = st.session_state.get(session_id_key)
                 save_history_to_firestore(db, current_session_id, st.session_state[results_key])
                 st.rerun()
             else:
                 st.session_state[f"{prefix}last_input"] = ""
+                
     if st.session_state.get(results_key):
         st.write("---")
         for result in st.session_state[results_key]:

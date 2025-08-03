@@ -4,7 +4,7 @@ import json
 from datetime import datetime
 import urllib.parse
 import pytz
-
+from streamlit_mic_recorder import mic_recorder
 import time # sleepのために追加
 
 # ===============================================================

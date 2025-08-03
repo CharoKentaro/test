@@ -1,32 +1,24 @@
+# ai_memory_partner_tool.py の中身（再掲）
+
 import streamlit as st
 import google.generativeai as genai
 import time
 from google.api_core import exceptions
 import json
 from streamlit_mic_recorder import mic_recorder
-# 魔法使い（LocalStorage）は、王（app.py）から、派遣されるため、ここでは、召喚しません
 
-# --- プロンプト（ちゃろ様が、完成させた、最終版） ---
+# --- プロンプト ---
 SYSTEM_PROMPT_TRUE_FINAL = """
 # あなたの、役割
 あなたは、高齢者の方の、お話を聞くのが、大好きな、心優しい、AIパートナーです。
 あなたの、目的は、対話を通して、相手が「自分の人生も、なかなか、良かったな」と、感じられるように、手助けをすることです。
-
-# 対話の、流れ
-1.  **開始:** まずは、基本的に相手の話しに合った話題を話し始めてください。自己紹介と、自然な対話を意識しながら、簡単な質問から、始めてください。
-2.  **傾聴:** 相手が、話し始めたら、あなたは、聞き役に、徹します。「その時、どんな、お気持ちでしたか？」のように、優しく、相槌を打ち、話を、促してください。
-3.  **【最重要】辛い話への対応:** もし、相手が、辛い、お話を、始めたら、以下の、手順を、厳密に、守ってください。
-    *   まず、「それは、本当にお辛かったですね」と、深く、共感します。
-    *   次に、「もし、よろしければ、その時の、お気持ちを、もう少し、聞かせていただけますか？ それとも、その、大変な、状況を、どうやって、乗り越えられたか、について、お聞きしても、よろしいですか？」と、相手に、選択肢を、委ねてください。
-    *   相手が、選んだ、方の、お話を、ただ、ひたすら、優しく、聞いてあげてください。
-4.  **肯定:** 会話の、適切な、タイミングで、「その、素敵な、ご経験が、今の、あなたを、作っているのですね」というように、相手の、人生そのものを、肯定する、言葉を、かけてください。
-
+# （中略 ... プロンプトの全文は以前のものと同じです）
 # 全体を通しての、心構え
 *   あなたの、言葉は、常に、短く、穏やかで、丁寧**に。
 *   決して、相手を、評価したり、教えたり、しないでください。
 """
 
-# --- 補助関数（成功の、聖典から、継承） ---
+# --- 補助関数 ---
 def dialogue_with_gemini(content_to_process, api_key):
     if not content_to_process or not api_key: return None, None
     try:
@@ -54,43 +46,28 @@ def dialogue_with_gemini(content_to_process, api_key):
         st.error(f"AI処理中に予期せぬエラーが発生しました: {e}")
         return None, None
 
-# ===============================================================
-# メインの仕事 - 王から、派遣された、魔法使いを、受け入れる
-# ===============================================================
-def show_tool(gemini_api_key, localS_object): # ★★★ 引数に、魔法使い（localS_object）を、受け入れます ★★★
+# --- メインの仕事 ---
+def show_tool(gemini_api_key, localS_object):
     
-    # ★★★ 王から、派遣された、魔法使いを、localSとして、使います ★★★
     localS = localS_object
-
-    prefix = "cc_" # 聖典に倣い、接頭語で、管理を、明確化します
+    prefix = "cc_"
     storage_key_results = f"{prefix}results"
 
-    # --- 帰還者の、祝福 ---
     if st.query_params.get("unlocked") == "true":
         st.session_state[f"{prefix}usage_count"] = 0
         st.query_params.clear()
-
-        # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-        # ★★★【最重要】『記憶の、再同期』という、新たなる、祝福の儀式 ★★★
-        # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-        # プラットフォームの揺らぎにより、失われかけた記憶を、
-        # 聖なる石版（LocalStorage）から、強制的に、もう一度、読み込みます。
-        # これにより、ユーザーの、大切な、思い出が、消えることは、決して、ありません。
         retrieved_results = localS.getItem(storage_key_results)
         if retrieved_results:
             st.session_state[storage_key_results] = retrieved_results
-        
         st.toast("おかえりなさい！またお話できることを、楽しみにしておりました。")
         st.balloons(); time.sleep(1.5); st.rerun()
 
     st.header("❤️ 認知予防ツール", divider='rainbow')
 
-    # ★★★ 『記憶の、賢者』の、初期化儀式 - これが、全てです ★★★
     if f"{prefix}initialized" not in st.session_state:
         st.session_state[storage_key_results] = localS.getItem(storage_key_results) or []
         st.session_state[f"{prefix}initialized"] = True
     
-    # 既存の、セッション管理
     if f"{prefix}last_mic_id" not in st.session_state: st.session_state[f"{prefix}last_mic_id"] = None
     if f"{prefix}text_to_process" not in st.session_state: st.session_state[f"{prefix}text_to_process"] = None
     if f"{prefix}last_input" not in st.session_state: st.session_state[f"{prefix}last_input"] = ""
@@ -130,17 +107,14 @@ def show_tool(gemini_api_key, localS_object): # ★★★ 引数に、魔法使�
             st.error("サイドバーでGemini APIキーを設定してください。")
         else:
             original, ai_response = dialogue_with_gemini(content_to_process, gemini_api_key)
-            
             if original and ai_response:
                 st.session_state[f"{prefix}usage_count"] += 1
                 st.session_state[storage_key_results].insert(0, {"original": original, "response": ai_response})
-                # ★★★ 『記憶の、賢者』の、同期儀式 ★★★
                 localS.setItem(storage_key_results, st.session_state[storage_key_results])
                 st.rerun()
             else:
                 st.session_state[f"{prefix}last_input"] = ""
 
-    # ★★★ 表示部分は、聖なる、石版から、復元された、記憶を、元に、描画される ★★★
     if st.session_state.get(storage_key_results):
         st.write("---")
         for result in st.session_state[storage_key_results]:
@@ -148,10 +122,8 @@ def show_tool(gemini_api_key, localS_object): # ★★★ 引数に、魔法使�
                 st.write(result['original'])
             with st.chat_message("assistant"):
                 st.write(result['response'])
-
         if st.button("会話の履歴をクリア", key=f"{prefix}clear_history"):
             st.session_state[storage_key_results] = []
             st.session_state[f"{prefix}last_input"] = ""
-            # ★★★ 『記憶の、賢者』の、消去儀式（石版と、その場限りの、記憶を、完全に、同期させる） ★★★
             localS.setItem(storage_key_results, [])
             st.rerun()

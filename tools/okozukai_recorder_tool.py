@@ -1,5 +1,5 @@
 # ===============================================================
-# ★★★ okozukai_recorder_tool.py ＜聖別と信頼の儀式・完成版＞ ★★★
+# ★★★ okozukai_recorder_tool.py ＜ハイブリッド記憶・完成版＞ ★★★
 # ===============================================================
 import streamlit as st
 import google.generativeai as genai
@@ -21,7 +21,7 @@ def format_balance_display(balance):
         return f"🔴 **{abs(balance):,.0f} 円 (予算オーバー)**"
 
 # ===============================================================
-# メインの仕事 - 最後の祝詞
+# メインの仕事 - 最後の答え
 # ===============================================================
 def show_tool(gemini_api_key):
     st.header("💰 お小遣い管理", divider='rainbow')
@@ -37,27 +37,22 @@ def show_tool(gemini_api_key):
     # --- LocalStorageで使う、聖なるキーを定義 ---
     key_allowance = f"{prefix}monthly_allowance"
     key_total_spent = f"{prefix}total_spent"
-    key_all_receipts = f"{prefix}all_receipts"
+    key_all_receipts = f"{prefix}all_receipt_data"
 
     # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
     # ★★★ 『聖別と、信頼の儀式』（一度きりの初期化） ★★★
     # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
     if f"{prefix}initialized" not in st.session_state:
-        # LocalStorageから、すべての知識を、一度だけ、敬意を込めて拝借する
         allowance = localS.getItem(key_allowance) or 0.0
         total_spent = localS.getItem(key_total_spent) or 0.0
         all_receipts = localS.getItem(key_all_receipts) or []
 
-        # 拝借した知識を、我々の、安全な聖域(session_state)に、聖別する
         st.session_state[f"{prefix}monthly_allowance"] = float(allowance)
         st.session_state[f"{prefix}total_spent"] = float(total_spent)
         st.session_state[f"{prefix}all_receipts"] = all_receipts
         
-        # 儀式に必要な、他の状態も、ここで、すべて整える
         st.session_state[f"{prefix}receipt_preview"] = None
         st.session_state[f"{prefix}usage_count"] = 0
-        
-        # 儀式が完了したという、聖なる印を刻む
         st.session_state[f"{prefix}initialized"] = True
 
     usage_limit = 1
@@ -65,16 +60,75 @@ def show_tool(gemini_api_key):
 
     # --- これ以降のコードは、すべて、聖別された session_state のみを信頼する ---
     
+    # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+    # ★★★ 『ハイブリッド記憶システム』の神殿 ★★★
+    # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+    with st.expander("🗂️ データ管理：データの保存と復元"):
+        st.info("データは通常ブラウザに自動保存されますが、万が一に備え、手動で保存・復元ができます。")
+        
+        # --- 『記憶の結晶』のダウンロード ---
+        all_data = {
+            "monthly_allowance": st.session_state[f"{prefix}monthly_allowance"],
+            "total_spent": st.session_state[f"{prefix}total_spent"],
+            "all_receipts": st.session_state[f"{prefix}all_receipts"],
+        }
+        json_data = json.dumps(all_data, indent=2, ensure_ascii=False)
+        st.download_button(
+            label="✅ 全データをファイルに保存する",
+            data=json_data.encode('utf-8-sig'),
+            file_name="okozukai_data.json",
+            mime="application/json",
+            help="現在の予算設定や支出履歴を、一つのファイルとしてお使いのPCに保存します。"
+        )
+
+        # --- 『記憶の継承』のアップロード ---
+        uploaded_data_file = st.file_uploader("📂 保存したファイルからデータを復元する", type=['json'], key=f"{prefix}data_uploader")
+        if uploaded_data_file is not None:
+            try:
+                restored_data = json.load(uploaded_data_file)
+                st.session_state[f"{prefix}monthly_allowance"] = float(restored_data.get("monthly_allowance", 0.0))
+                st.session_state[f"{prefix}total_spent"] = float(restored_data.get("total_spent", 0.0))
+                st.session_state[f"{prefix}all_receipts"] = restored_data.get("all_receipts", [])
+                
+                # ★★★ 復元したデータを、LocalStorageにも報告 ★★★
+                localS.setItem(key_allowance, st.session_state[f"{prefix}monthly_allowance"])
+                localS.setItem(key_total_spent, st.session_state[f"{prefix}total_spent"])
+                localS.setItem(key_all_receipts, st.session_state[f"{prefix}all_receipts"])
+
+                st.success("データの復元に成功しました！")
+                time.sleep(1)
+                st.rerun()
+            except Exception as e:
+                st.error(f"データの復元に失敗しました。ファイルが破損している可能性があります。エラー: {e}")
+
+        st.divider()
+        # --- 全データリセットボタン ---
+        if st.button("⚠️ 全てのデータをリセットする", use_container_width=True, type="secondary", help="現在の予算設定や支出履歴を、すべて消去します。"):
+            st.session_state[f"{prefix}monthly_allowance"] = 0.0
+            st.session_state[f"{prefix}total_spent"] = 0.0
+            st.session_state[f"{prefix}all_receipts"] = []
+            st.session_state[f"{prefix}receipt_preview"] = None
+            st.session_state[f"{prefix}usage_count"] = 0
+            
+            # ★★★ 感謝の報告（リセット） ★★★
+            localS.setItem(key_allowance, 0.0)
+            localS.setItem(key_total_spent, 0.0)
+            localS.setItem(key_all_receipts, [])
+            
+            st.success("全データをリセットしました！"); time.sleep(1); st.rerun()
+
+
+    st.divider()
+
     if is_limit_reached:
         # アンロック・モード
         st.success("🎉 たくさんのご利用、ありがとうございます！")
+        # ... (この部分は変更なし) ...
         st.info("このツールが、あなたの家計管理の一助となれば幸いです。")
         st.warning("レシートの読み込みを続けるには、応援ページで「今日の合言葉（4桁の数字）」を確認し、入力してください。")
-        
         portal_url = "https://pray-power-is-god-and-cocoro.com/free3/continue2.html"
         st.markdown(f'<a href="{portal_url}" target="_blank">応援ページで「今日の合言葉」を確認する →</a>', unsafe_allow_html=True)
         st.divider()
-
         password_input = st.text_input("ここに「今日の合言葉」を入力してください:", type="password", key=f"{prefix}password_input")
         if st.button("レシートの読み込み回数をリセットする", key=f"{prefix}unlock_button"):
             JST = timezone(timedelta(hours=+9))
@@ -82,7 +136,6 @@ def show_tool(gemini_api_key):
             seed_str = st.secrets.get("unlock_seed", "0")
             seed_int = int(seed_str) if seed_str.isdigit() else 0
             correct_password = str((today_int + seed_int) % 10000).zfill(4)
-            
             if password_input == correct_password:
                 st.session_state[f"{prefix}usage_count"] = 0
                 st.balloons()
@@ -94,8 +147,8 @@ def show_tool(gemini_api_key):
 
     elif st.session_state[f"{prefix}receipt_preview"]:
         # 確認モード
+        # ... (この部分は変更なし) ...
         st.subheader("📝 支出の確認")
-        # ... (この中身は、完全に変更なし) ...
         st.info("AIが読み取った内容を確認・修正し、問題なければ「確定」してください。")
         preview_data = st.session_state[f"{prefix}receipt_preview"]
         corrected_amount = st.number_input("AIが読み取った合計金額はこちらです。必要なら修正してください。", value=preview_data['total_amount'], min_value=0.0, step=1.0, key=f"{prefix}correction_input")
@@ -120,16 +173,12 @@ def show_tool(gemini_api_key):
         st.divider()
         confirm_col, cancel_col = st.columns(2)
         if confirm_col.button("💰 この金額で支出を確定する", type="primary", use_container_width=True):
-            # 聖域(session_state)を更新
+            st.session_state[f"{prefix}total_spent"] += corrected_amount
             new_receipt_record = {"date": datetime.now().strftime('%Y-%m-%d %H:%M'), "total_amount": corrected_amount, "items": edited_df.to_dict('records')}
             st.session_state[f"{prefix}all_receipts"].append(new_receipt_record)
-            st.session_state[f"{prefix}total_spent"] += corrected_amount
             st.session_state[f"{prefix}receipt_preview"] = None
-
-            # ★★★ 感謝の報告 ★★★
-            localS.setItem(key_all_receipts, st.session_state[f"{prefix}all_receipts"])
             localS.setItem(key_total_spent, st.session_state[f"{prefix}total_spent"])
-            
+            localS.setItem(key_all_receipts, st.session_state[f"{prefix}all_receipts"])
             st.success(f"🎉 {corrected_amount:,.0f} 円の支出を記録しました！")
             st.balloons()
             time.sleep(2)
@@ -137,7 +186,6 @@ def show_tool(gemini_api_key):
         if cancel_col.button("❌ キャンセル", use_container_width=True):
             st.session_state[f"{prefix}receipt_preview"] = None
             st.rerun()
-
     else:
         # 通常モード
         st.info("レシートを登録して、今月使えるお金を管理しよう！")
@@ -147,12 +195,8 @@ def show_tool(gemini_api_key):
              with st.form(key=f"{prefix}allowance_form"):
                 new_allowance = st.number_input("今月のお小遣いを入力してください", value=st.session_state[f"{prefix}monthly_allowance"], step=1000.0, min_value=0.0)
                 if st.form_submit_button("この金額で設定する", use_container_width=True):
-                    # 聖域(session_state)を更新
                     st.session_state[f"{prefix}monthly_allowance"] = new_allowance
-                    
-                    # ★★★ 感謝の報告 ★★★
                     localS.setItem(key_allowance, new_allowance)
-                    
                     st.success(f"今月のお小遣いを {new_allowance:,.0f} 円に設定しました！")
                     st.rerun()
         
@@ -197,15 +241,11 @@ def show_tool(gemini_api_key):
                         st.error(f"❌ 解析エラー: {e}")
                         if 'gemini_response' in locals(): st.code(gemini_response.text, language="text")
         
-        # ★★★ データ管理セクションを、メインUIに移動 ★★★
         st.divider()
-        st.subheader("🗂️ 支出履歴")
+        st.subheader("📜 支出履歴")
         if st.session_state[f"{prefix}all_receipts"]:
-            st.info(f"現在、{len(st.session_state[f'{prefix}all_receipts'])} 件のレシートデータが保存されています。")
-            
-            # ★★★ 履歴表示を、よりシンプルで美しいテーブルに ★★★
             display_list = []
-            for receipt in reversed(st.session_state[f'{prefix}all_receipts']): # 新しいものが上に来るように
+            for receipt in reversed(st.session_state[f'{prefix}all_receipts']):
                 date = receipt.get('date', 'N/A')
                 total = receipt.get('total_amount', 0)
                 items = receipt.get('items', [])
@@ -213,12 +253,3 @@ def show_tool(gemini_api_key):
                 display_list.append({"日付": date, "合計金額": f"{total:,.0f} 円", "主な品目": item_names})
             if display_list:
                 st.dataframe(display_list, use_container_width=True)
-
-            # --- 全データリセットボタン ---
-            if st.button("⚠️ 全ての支出履歴をリセット", use_container_width=True, help="これまでに記録した、全てのレシートと支出の履歴を消去します。"):
-                st.session_state[f"{prefix}total_spent"] = 0.0
-                st.session_state[f"{prefix}all_receipts"] = []
-                # ★★★ 感謝の報告 ★★★
-                localS.setItem(key_total_spent, 0.0)
-                localS.setItem(key_all_receipts, [])
-                st.success("支出履歴をリセットしました！"); time.sleep(1); st.rerun()

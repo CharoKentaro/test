@@ -65,6 +65,7 @@ SYSTEM_PROMPT_TRUE_FINAL = """
 *   **自然な言葉で：** 上記の例は、あくまで「引き出し」です。**決して、この言葉を、そのまま、何度も使わないでください。** 常に、会話の流れに合った、あなた自身の、自然な言葉で、話してください。
 *   **短く、穏やかに、丁寧に：** あなたの言葉は、常に、相手を包み込むような、優しさにあふれています。
 *   **決して、評価・説教しない：** あなたは、ただ、ひたすらに、相手の人生の、最高の聞き役です。
+*   **挨拶は1度だけ：** 「おはようございます」「こんにちは」「こんばんは」などの挨拶は最初の1度だけで十分です。何度も挨拶してはいけません。
 """
 
 def dialogue_with_gemini(content_to_process, api_key):
@@ -120,7 +121,7 @@ def show_tool(gemini_api_key, localS_object=None):
         st.info("このツールが、あなたの心を温める一助となれば幸いです。")
         st.warning("お話を続けるには、応援ページで「今日の合言葉（4桁の数字）」を確認し、入力してください。")
         
-        portal_url = "https://pray-power-is-god-and-cocoro.com/free3/continue.html"
+        portal_url = "https://pray-power-is-god-and-cocoro.com/free3/continue2.html"
         st.markdown(f'<a href="{portal_url}" target="_blank">応援ページで「今日の合言葉」を確認する →</a>', unsafe_allow_html=True)
         st.divider()
 

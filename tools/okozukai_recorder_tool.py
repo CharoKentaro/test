@@ -1,5 +1,5 @@
 # ===============================================================
-# ★★★ okozukai_recorder_tool.py ＜JavaScript LocalStorage直接操作版＞ ★★★
+# ★★★ okozukai_recorder_tool.py ＜多重永続化対応版＞ ★★★
 # ===============================================================
 import streamlit as st
 import google.generativeai as genai
@@ -8,6 +8,9 @@ from PIL import Image
 import pandas as pd
 from datetime import datetime, timedelta, timezone
 import time
+import os
+import tempfile
+from pathlib import Path
 
 # --- プロンプトや補助関数（省略） ---
 GEMINI_PROMPT = """..."""
@@ -20,148 +23,179 @@ def format_balance_display(balance):
         return f"🔴 **{abs(balance):,.0f} 円 (予算オーバー)**"
 
 # ===============================================================
-# JavaScript LocalStorage操作関数
+# 永続化システム
 # ===============================================================
-def init_js_localstorage():
-    """JavaScript LocalStorage操作のためのコードを挿入"""
-    js_code = """
+def get_data_file_path():
+    """データファイルのパスを取得"""
+    # Streamlitの一時ディレクトリを使用
+    temp_dir = Path(tempfile.gettempdir()) / "streamlit_okozukai"
+    temp_dir.mkdir(exist_ok=True)
+    return temp_dir / "okozukai_data.json"
+
+def save_data_to_file(data):
+    """データをファイルに保存"""
+    try:
+        file_path = get_data_file_path()
+        with open(file_path, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        return True
+    except Exception as e:
+        st.error(f"ファイル保存エラー: {e}")
+        return False
+
+def load_data_from_file():
+    """ファイルからデータを読み込み"""
+    try:
+        file_path = get_data_file_path()
+        if file_path.exists():
+            with open(file_path, 'r', encoding='utf-8') as f:
+                return json.load(f)
+    except Exception as e:
+        st.warning(f"ファイル読み込み注意: {e}")
+    return None
+
+def get_url_params():
+    """URLパラメータからデータを取得"""
+    try:
+        # Streamlit 1.28.0以降のクエリパラメータ取得方法
+        query_params = st.experimental_get_query_params() if hasattr(st, 'experimental_get_query_params') else {}
+        
+        data = {}
+        if 'allowance' in query_params:
+            data['monthly_allowance'] = float(query_params['allowance'][0])
+        if 'spent' in query_params:
+            data['total_spent'] = float(query_params['spent'][0])
+        if 'receipts' in query_params:
+            data['all_receipts'] = json.loads(query_params['receipts'][0])
+        
+        return data if data else None
+    except Exception as e:
+        st.warning(f"URL パラメータ読み込み注意: {e}")
+        return None
+
+def set_url_params(data):
+    """URLパラメータにデータを設定"""
+    try:
+        query_params = {
+            'allowance': [str(data.get('monthly_allowance', 0))],
+            'spent': [str(data.get('total_spent', 0))],
+            'receipts': [json.dumps(data.get('all_receipts', []), ensure_ascii=False)]
+        }
+        if hasattr(st, 'experimental_set_query_params'):
+            st.experimental_set_query_params(**query_params)
+    except Exception as e:
+        st.warning(f"URL パラメータ設定注意: {e}")
+
+# ===============================================================
+# ブラウザ永続化（Cookieスタイル）
+# ===============================================================
+def create_persistent_storage():
+    """永続化ストレージを作成"""
+    storage_js = """
+    <div id="persistent_storage" style="display:none;"></div>
     <script>
-    // LocalStorageからデータを取得する関数
-    function getFromLocalStorage(key) {
+    // データを複数の方法で保存
+    function savePersistentData(key, value) {
+        const dataStr = JSON.stringify(value);
+        
+        // 1. LocalStorage
         try {
-            const value = localStorage.getItem(key);
-            if (value === null || value === undefined) {
-                return null;
+            localStorage.setItem('okozukai_' + key, dataStr);
+        } catch(e) { console.log('LocalStorage失敗:', e); }
+        
+        // 2. SessionStorage
+        try {
+            sessionStorage.setItem('okozukai_' + key, dataStr);
+        } catch(e) { console.log('SessionStorage失敗:', e); }
+        
+        // 3. Cookie (有効期限30日)
+        try {
+            const expires = new Date();
+            expires.setTime(expires.getTime() + (30*24*60*60*1000));
+            document.cookie = 'okozukai_' + key + '=' + encodeURIComponent(dataStr) + ';expires=' + expires.toUTCString() + ';path=/';
+        } catch(e) { console.log('Cookie失敗:', e); }
+        
+        // 4. IndexedDB (簡易版)
+        try {
+            if ('indexedDB' in window) {
+                const request = indexedDB.open('OkozukaiDB', 1);
+                request.onsuccess = function(event) {
+                    const db = event.target.result;
+                    if (db.objectStoreNames.contains('data')) {
+                        const transaction = db.transaction(['data'], 'readwrite');
+                        const objectStore = transaction.objectStore('data');
+                        objectStore.put({id: key, value: dataStr});
+                    }
+                };
+                request.onupgradeneeded = function(event) {
+                    const db = event.target.result;
+                    if (!db.objectStoreNames.contains('data')) {
+                        db.createObjectStore('data', {keyPath: 'id'});
+                    }
+                };
             }
-            // JSON形式で保存されている場合はパース
-            try {
-                return JSON.parse(value);
-            } catch {
-                return value;
-            }
-        } catch (error) {
-            console.error('LocalStorage取得エラー:', error);
-            return null;
-        }
+        } catch(e) { console.log('IndexedDB失敗:', e); }
     }
     
-    // LocalStorageにデータを保存する関数
-    function setToLocalStorage(key, value) {
+    // データを複数の方法から読み込み
+    function loadPersistentData(key) {
+        let data = null;
+        
+        // 1. LocalStorage
         try {
-            // オブジェクトや配列の場合はJSON文字列に変換
-            const stringValue = typeof value === 'object' ? JSON.stringify(value) : String(value);
-            localStorage.setItem(key, stringValue);
-            return true;
-        } catch (error) {
-            console.error('LocalStorage保存エラー:', error);
-            return false;
-        }
+            data = localStorage.getItem('okozukai_' + key);
+            if (data) return JSON.parse(data);
+        } catch(e) {}
+        
+        // 2. SessionStorage
+        try {
+            data = sessionStorage.getItem('okozukai_' + key);
+            if (data) return JSON.parse(data);
+        } catch(e) {}
+        
+        // 3. Cookie
+        try {
+            const cookies = document.cookie.split(';');
+            for (let cookie of cookies) {
+                const [name, value] = cookie.trim().split('=');
+                if (name === 'okozukai_' + key) {
+                    return JSON.parse(decodeURIComponent(value));
+                }
+            }
+        } catch(e) {}
+        
+        return null;
     }
     
-    // Streamlitとの通信のためのイベントリスナー
+    // Streamlitとの通信
     window.addEventListener('message', function(event) {
-        if (event.data.type === 'GET_LOCALSTORAGE') {
-            const value = getFromLocalStorage(event.data.key);
-            window.parent.postMessage({
-                type: 'LOCALSTORAGE_RESPONSE',
-                key: event.data.key,
-                value: value
-            }, '*');
-        } else if (event.data.type === 'SET_LOCALSTORAGE') {
-            const success = setToLocalStorage(event.data.key, event.data.value);
-            window.parent.postMessage({
-                type: 'LOCALSTORAGE_SET_RESPONSE',
-                key: event.data.key,
-                success: success
-            }, '*');
+        if (event.data.type === 'SAVE_DATA') {
+            savePersistentData(event.data.key, event.data.value);
+            window.parent.postMessage({type: 'DATA_SAVED', key: event.data.key}, '*');
+        } else if (event.data.type === 'LOAD_DATA') {
+            const value = loadPersistentData(event.data.key);
+            window.parent.postMessage({type: 'DATA_LOADED', key: event.data.key, value: value}, '*');
         }
     });
     
-    // 初期化完了を通知
-    window.parent.postMessage({type: 'LOCALSTORAGE_READY'}, '*');
+    // 初期データ読み込み
+    window.onload = function() {
+        const allowance = loadPersistentData('monthly_allowance');
+        const spent = loadPersistentData('total_spent');
+        const receipts = loadPersistentData('all_receipts');
+        
+        window.parent.postMessage({
+            type: 'INITIAL_DATA_LOADED',
+            data: {
+                monthly_allowance: allowance,
+                total_spent: spent,
+                all_receipts: receipts
+            }
+        }, '*');
+    };
     </script>
     """
-    st.components.v1.html(js_code, height=0)
-
-def get_from_browser_storage(key, default_value=None):
-    """ブラウザのLocalStorageから値を取得"""
-    storage_key = f"okozukai_{key}"
-    
-    # セッション状態に既に値がある場合はそれを使用
-    session_key = f"cached_{storage_key}"
-    if session_key in st.session_state:
-        return st.session_state[session_key]
-    
-    # JavaScriptでLocalStorageから直接取得するHTMLコード
-    html_code = f"""
-    <div id="storage_reader_{key}" style="display:none;"></div>
-    <script>
-    (function() {{
-        try {{
-            const value = localStorage.getItem('{storage_key}');
-            if (value !== null) {{
-                // 取得した値をStreamlitに送信
-                const event = new CustomEvent('streamlit:setComponentValue', {{
-                    detail: {{ value: value }}
-                }});
-                window.parent.document.dispatchEvent(event);
-            }}
-        }} catch (error) {{
-            console.error('LocalStorage読み取りエラー:', error);
-        }}
-    }})();
-    </script>
-    """
-    
-    # 一意のキーでHTMLコンポーネントを作成
-    component_key = f"storage_reader_{key}_{hash(storage_key) % 10000}"
-    result = st.components.v1.html(html_code, height=0, key=component_key)
-    
-    if result:
-        try:
-            # JSON形式で保存されている場合はパース
-            if isinstance(result, str) and result.startswith('{') or result.startswith('['):
-                parsed_value = json.loads(result)
-            else:
-                parsed_value = float(result) if result.replace('.', '').replace('-', '').isdigit() else result
-            
-            # セッション状態にキャッシュ
-            st.session_state[session_key] = parsed_value
-            return parsed_value
-        except:
-            pass
-    
-    return default_value
-
-def save_to_browser_storage(key, value):
-    """ブラウザのLocalStorageに値を保存"""
-    storage_key = f"okozukai_{key}"
-    
-    # セッション状態にもキャッシュ
-    session_key = f"cached_{storage_key}"
-    st.session_state[session_key] = value
-    
-    # JSON形式で保存
-    json_value = json.dumps(value, ensure_ascii=False) if isinstance(value, (dict, list)) else str(value)
-    
-    # JavaScriptでLocalStorageに保存するHTMLコード
-    html_code = f"""
-    <div style="display:none;"></div>
-    <script>
-    (function() {{
-        try {{
-            localStorage.setItem('{storage_key}', '{json_value}');
-            console.log('LocalStorage保存成功:', '{storage_key}', '{json_value}');
-        }} catch (error) {{
-            console.error('LocalStorage保存エラー:', error);
-        }}
-    }})();
-    </script>
-    """
-    
-    # 一意のキーでHTMLコンポーネントを作成
-    component_key = f"storage_writer_{key}_{hash(f'{storage_key}_{value}') % 10000}"
-    st.components.v1.html(html_code, height=0, key=component_key)
+    return storage_js
 
 # ===============================================================
 # メインの仕事 - 最後の答え
@@ -171,49 +205,106 @@ def show_tool(gemini_api_key):
     
     prefix = "okozukai_"
     
+    # 永続化ストレージを初期化
+    st.components.v1.html(create_persistent_storage(), height=0, key="persistent_storage")
+    
     # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-    # ★★★ ブラウザLocalStorageからデータを読み込み ★★★
+    # ★★★ 多重データソースからの読み込み ★★★
     # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
     
-    # 初期化フラグ
-    if f"{prefix}data_loaded" not in st.session_state:
-        # LocalStorageからデータを読み込み
-        saved_allowance = get_from_browser_storage("monthly_allowance", 0.0)
-        saved_spent = get_from_browser_storage("total_spent", 0.0)
-        saved_receipts = get_from_browser_storage("all_receipts", [])
+    if f"{prefix}data_initialized" not in st.session_state:
+        # デフォルト値
+        default_data = {
+            "monthly_allowance": 0.0,
+            "total_spent": 0.0,
+            "all_receipts": []
+        }
+        
+        loaded_data = default_data.copy()
+        data_source = "デフォルト"
+        
+        # 1. ファイルから読み込み
+        file_data = load_data_from_file()
+        if file_data:
+            loaded_data.update(file_data)
+            data_source = "ファイル"
+        
+        # 2. URLパラメータから読み込み
+        url_data = get_url_params()
+        if url_data:
+            loaded_data.update(url_data)
+            data_source = "URL"
         
         # セッション状態に設定
-        st.session_state[f"{prefix}monthly_allowance"] = float(saved_allowance) if saved_allowance else 0.0
-        st.session_state[f"{prefix}total_spent"] = float(saved_spent) if saved_spent else 0.0
-        st.session_state[f"{prefix}all_receipts"] = saved_receipts if isinstance(saved_receipts, list) else []
+        st.session_state[f"{prefix}monthly_allowance"] = float(loaded_data.get("monthly_allowance", 0))
+        st.session_state[f"{prefix}total_spent"] = float(loaded_data.get("total_spent", 0))
+        st.session_state[f"{prefix}all_receipts"] = loaded_data.get("all_receipts", [])
         st.session_state[f"{prefix}receipt_preview"] = None
         st.session_state[f"{prefix}usage_count"] = 0
-        st.session_state[f"{prefix}data_loaded"] = True
+        st.session_state[f"{prefix}data_initialized"] = True
+        st.session_state[f"{prefix}data_source"] = data_source
         
-        # デバッグ情報
-        st.info(f"💾 保存されたデータを読み込みました - 予算: {st.session_state[f'{prefix}monthly_allowance']:,.0f}円")
+        if loaded_data['monthly_allowance'] > 0:
+            st.success(f"💾 データを復元しました（ソース: {data_source}） - 予算: {loaded_data['monthly_allowance']:,.0f}円")
+
+    # データ保存関数
+    def save_all_data():
+        """全てのストレージにデータを保存"""
+        current_data = {
+            "monthly_allowance": st.session_state[f"{prefix}monthly_allowance"],
+            "total_spent": st.session_state[f"{prefix}total_spent"],
+            "all_receipts": st.session_state[f"{prefix}all_receipts"]
+        }
+        
+        # 1. ファイルに保存
+        save_data_to_file(current_data)
+        
+        # 2. URLパラメータに保存
+        set_url_params(current_data)
+        
+        # 3. JavaScript永続化ストレージに保存
+        for key, value in current_data.items():
+            save_js = f"""
+            <script>
+            window.postMessage({{type: 'SAVE_DATA', key: '{key}', value: {json.dumps(value)}}}, '*');
+            </script>
+            """
+            st.components.v1.html(save_js, height=0, key=f"save_{key}_{hash(str(value)) % 1000}")
 
     usage_limit = 1
     is_limit_reached = st.session_state.get(f"{prefix}usage_count", 0) >= usage_limit
 
-    # デバッグ情報表示
+    # デバッグ情報
     with st.expander("🔧 デバッグ情報", expanded=False):
-        st.write("現在のセッション状態:")
-        st.write(f"- 予算: {st.session_state.get(f'{prefix}monthly_allowance', 'なし')}")
-        st.write(f"- 使用済み: {st.session_state.get(f'{prefix}total_spent', 'なし')}")
+        st.write("現在のデータ:")
+        st.write(f"- データソース: {st.session_state.get(f'{prefix}data_source', '不明')}")
+        st.write(f"- 予算: {st.session_state.get(f'{prefix}monthly_allowance', 0):,.0f}円")
+        st.write(f"- 使用済み: {st.session_state.get(f'{prefix}total_spent', 0):,.0f}円")
         st.write(f"- レシート数: {len(st.session_state.get(f'{prefix}all_receipts', []))}")
         
-        if st.button("🔄 LocalStorageから再読み込み", key="debug_reload"):
-            st.session_state[f"{prefix}data_loaded"] = False
+        st.write("ファイル情報:")
+        file_path = get_data_file_path()
+        st.write(f"- パス: {file_path}")
+        st.write(f"- 存在: {file_path.exists()}")
+        if file_path.exists():
+            st.write(f"- サイズ: {file_path.stat().st_size} bytes")
+        
+        col1, col2 = st.columns(2)
+        if col1.button("🔄 データを再読み込み"):
+            st.session_state[f"{prefix}data_initialized"] = False
             st.rerun()
+        
+        if col2.button("💾 今すぐ保存"):
+            save_all_data()
+            st.success("保存完了！")
 
     # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
     # ★★★ データ管理セクション ★★★
     # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-    with st.expander("🗂️ データ管理：データの保存と復元"):
-        st.info("データは自動的にブラウザに保存されますが、バックアップとして手動保存も可能です。")
+    with st.expander("🗂️ データ管理"):
+        st.info("データは自動的に複数の場所に保存されます（ファイル、URL、ブラウザ）")
         
-        # --- データのダウンロード ---
+        # データダウンロード
         all_data = {
             "monthly_allowance": st.session_state[f"{prefix}monthly_allowance"],
             "total_spent": st.session_state[f"{prefix}total_spent"],
@@ -221,49 +312,35 @@ def show_tool(gemini_api_key):
         }
         json_data = json.dumps(all_data, indent=2, ensure_ascii=False)
         st.download_button(
-            label="✅ 全データをファイルに保存する",
+            label="✅ バックアップファイルをダウンロード",
             data=json_data.encode('utf-8-sig'),
-            file_name="okozukai_data.json",
-            mime="application/json",
-            help="現在の予算設定や支出履歴を、一つのファイルとしてお使いのPCに保存します。"
+            file_name=f"okozukai_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+            mime="application/json"
         )
 
-        # --- データの復元 ---
-        uploaded_data_file = st.file_uploader("📂 保存したファイルからデータを復元する", type=['json'], key=f"{prefix}data_uploader")
-        if uploaded_data_file is not None:
+        # データ復元
+        uploaded_file = st.file_uploader("📂 バックアップから復元", type=['json'])
+        if uploaded_file:
             try:
-                restored_data = json.load(uploaded_data_file)
-                st.session_state[f"{prefix}monthly_allowance"] = float(restored_data.get("monthly_allowance", 0.0))
-                st.session_state[f"{prefix}total_spent"] = float(restored_data.get("total_spent", 0.0))
+                restored_data = json.load(uploaded_file)
+                st.session_state[f"{prefix}monthly_allowance"] = float(restored_data.get("monthly_allowance", 0))
+                st.session_state[f"{prefix}total_spent"] = float(restored_data.get("total_spent", 0))
                 st.session_state[f"{prefix}all_receipts"] = restored_data.get("all_receipts", [])
-                
-                # ブラウザのLocalStorageにも保存
-                save_to_browser_storage("monthly_allowance", st.session_state[f"{prefix}monthly_allowance"])
-                save_to_browser_storage("total_spent", st.session_state[f"{prefix}total_spent"])
-                save_to_browser_storage("all_receipts", st.session_state[f"{prefix}all_receipts"])
-
-                st.success("データの復元に成功しました！")
-                time.sleep(1)
+                save_all_data()
+                st.success("データ復元完了！")
                 st.rerun()
             except Exception as e:
-                st.error(f"データの復元に失敗しました。ファイルが破損している可能性があります。エラー: {e}")
+                st.error(f"復元エラー: {e}")
 
-        st.divider()
-        # --- リセットボタン ---
-        if st.button("⚠️ 全てのデータをリセットする", use_container_width=True, type="secondary"):
+        # リセット
+        if st.button("⚠️ 全データリセット", type="secondary"):
             st.session_state[f"{prefix}monthly_allowance"] = 0.0
             st.session_state[f"{prefix}total_spent"] = 0.0
             st.session_state[f"{prefix}all_receipts"] = []
             st.session_state[f"{prefix}receipt_preview"] = None
             st.session_state[f"{prefix}usage_count"] = 0
-            
-            # ブラウザのLocalStorageもリセット
-            save_to_browser_storage("monthly_allowance", 0.0)
-            save_to_browser_storage("total_spent", 0.0)
-            save_to_browser_storage("all_receipts", [])
-            
-            st.success("全データをリセットしました！")
-            time.sleep(1)
+            save_all_data()
+            st.success("リセット完了！")
             st.rerun()
 
     st.divider()
@@ -293,7 +370,7 @@ def show_tool(gemini_api_key):
                 st.error("合言葉が違うようです。応援ページで、もう一度ご確認ください。")
 
     elif st.session_state[f"{prefix}receipt_preview"]:
-        # 確認モード
+        # 確認モード（変更なし）
         st.subheader("📝 支出の確認")
         st.info("AIが読み取った内容を確認・修正し、問題なければ「確定」してください。")
         preview_data = st.session_state[f"{prefix}receipt_preview"]
@@ -336,11 +413,7 @@ def show_tool(gemini_api_key):
             }
             st.session_state[f"{prefix}all_receipts"].append(new_receipt_record)
             st.session_state[f"{prefix}receipt_preview"] = None
-            
-            # ブラウザのLocalStorageに保存
-            save_to_browser_storage("total_spent", st.session_state[f"{prefix}total_spent"])
-            save_to_browser_storage("all_receipts", st.session_state[f"{prefix}all_receipts"])
-            
+            save_all_data()  # 全データを保存
             st.success(f"🎉 {corrected_amount:,.0f} 円の支出を記録しました！")
             st.balloons()
             time.sleep(2)
@@ -361,9 +434,9 @@ def show_tool(gemini_api_key):
                                               step=1000.0, min_value=0.0)
                 if st.form_submit_button("この金額で設定する", use_container_width=True):
                     st.session_state[f"{prefix}monthly_allowance"] = new_allowance
-                    # ブラウザのLocalStorageに保存
-                    save_to_browser_storage("monthly_allowance", new_allowance)
+                    save_all_data()  # 全データを保存
                     st.success(f"今月のお小遣いを {new_allowance:,.0f} 円に設定しました！")
+                    st.balloons()
                     st.rerun()
         
         st.divider()

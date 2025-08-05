@@ -1,118 +1,44 @@
-# ===============================================================
-# ★★★ translator_tool.py ＜ちゃろさん作・最終完成版＞ ★★★
-# ===============================================================
-import streamlit as st
-import google.generativeai as genai
-import time
-import json
-from streamlit_mic_recorder import mic_recorder
-from google.api_core import exceptions
+# --- 衝突回避のための接頭辞 ---
+prefix = "translator_"
 
-# --- 補助関数 (ちゃろさんの叡智) ---
-def translate_with_gemini(content_to_process, api_key):
-    if not content_to_process or not api_key:
-        return None, None
-    try:
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-1.5-flash-latest')
+# --- セッションステートの初期化 ---
+if f"{prefix}usage_count" not in st.session_state: st.session_state[f"{prefix}usage_count"] = 0
+if f"{prefix}results" not in st.session_state: st.session_state[f"{prefix}results"] = []
+if f"{prefix}last_mic_id" not in st.session_state: st.session_state[f"{prefix}last_mic_id"] = None
+if f"{prefix}text_to_process" not in st.session_state: st.session_state[f"{prefix}text_to_process"] = None
+if f"{prefix}last_input" not in st.session_state: st.session_state[f"{prefix}last_input"] = ""
 
-        if isinstance(content_to_process, bytes):
-            with st.spinner("（あなたの声を、言葉に、変えています...）"):
-                audio_part = {"mime_type": "audio/webm", "data": content_to_process}
-                transcription_prompt = "この日本語の音声を、できる限り正確に、文字に書き起こしてください。書き起こした日本語テキストのみを回答してください。"
-                transcription_response = model.generate_content([transcription_prompt, audio_part])
-                processed_text = transcription_response.text.strip()
-            if not processed_text:
-                st.error("あなたの声を、言葉に、変えることができませんでした。もう一度お試しください。")
-                return None, None
-            original_input_display = f"{processed_text} (🎙️音声より)"
-        else:
-            processed_text = content_to_process
-            original_input_display = processed_text
+# --- 応援機能のロジック ---
+usage_limit = 1
+is_limit_reached = st.session_state.get(f"{prefix}usage_count", 0) >= usage_limit
 
-        with st.spinner("AIが、最適な、3つの、翻訳候補を、考えています..."):
-            system_prompt = """
-            # 命令書: 言語ニュアンスの、探求者としての、あなたの、責務
-            あなたは、プロフェッショナルな、翻訳アシスタントです。
-            あなたの、唯一の、任務は、ユーザーから、渡された、日本語を、分析し、ニュアンスの異なる、3つの、プロフェッショナルな、英訳候補を、生成し、以下の、JSON形式で、厳格に、出力することです。
-            ## JSON出力に関する、絶対的な、契約条件：
-            あなたの回答は、必ず、以下のJSON構造に、厳密に、従うこと。このJSONオブジェクト以外の、いかなるテキストも、絶対に、絶対に、含めてはならない。
-            ```json
-            {
-              "candidates": [
-                {
-                  "translation": "ここに、1つ目の、最も、標準的な、翻訳候補を記述します。",
-                  "nuance": "この翻訳が持つ、ニュアンス（例：「最も一般的」「フォーマル」など）を、簡潔に、説明します。"
-                },
-                {
-                  "translation": "ここに、2つ目の、少し、ニュアンスの異なる、翻訳候補を記述します。",
-                  "nuance": "この翻訳が持つ、ニュアンス（例：「より丁寧」「やや婉曲的」など）を、簡潔に、説明します。"
-                },
-                {
-                  "translation": "ここに、3つ目の、さらに、異なる、視点からの、翻訳候補を記述します。",
-                  "nuance": "この翻訳が持つ、ニュアンス（例：「最も簡潔」「直接的」など）を、簡潔に、説明します。"
-                }
-              ]
-            }
-            ```
-            ## 最重要ルール:
-            - `translation` は、必ず、プロフェッショナルな英語で、記述すること。
-            - `nuance` は、必ず、その、違いが、一目でわかる、**簡潔な【日本語】**で、記述すること。
-            """
-            request_contents = [system_prompt, processed_text]
-            response = model.generate_content(request_contents)
-            raw_response_text = response.text
-        
-        json_start_index = raw_response_text.find('{')
-        json_end_index = raw_response_text.rfind('}')
-        if json_start_index != -1 and json_end_index != -1:
-            pure_json_text = raw_response_text[json_start_index : json_end_index + 1]
-            try:
-                translated_proposals = json.loads(pure_json_text)
-                return original_input_display, translated_proposals
-            except json.JSONDecodeError:
-                st.error("AIが生成したデータの構造が破損していました。お手数ですが、もう一度お試しください。")
-                return None, None
-        else:
-            st.error("AIから予期せぬ形式の応答がありました。JSONデータが含まれていません。")
-            return None, None
-    except exceptions.ResourceExhausted:
-        st.error("APIキーの上限に達した可能性があります。少し時間をあけるか、明日以降に再試行してください。")
-        return None, None
-    except Exception as e:
-        st.error(f"AI処理中に予期せぬエラーが発生しました: {e}")
-        return None, None
+# 応援ページから戻ってきたかをURLクエリパラメータで判定
+if st.query_params.get("unlocked") == "true" and st.query_params.get("from") == "translator":
+    st.session_state[f"{prefix}usage_count"] = 0
+    st.query_params.clear() 
+    st.toast("おかえりなさい！利用回数がリセットされました。")
+    st.balloons(); time.sleep(1); st.rerun()
 
-# ===============================================================
-# メインの仕事 (app.py との連携を考慮した、最終調整)
-# ===============================================================
-def show_tool(gemini_api_key):
-    st.header("🤝 翻訳ツール", divider='rainbow')
+# --- UIロジックの分岐 ---
+if is_limit_reached:
+    # --- アンロック・モード ---
+    st.success("🎉 たくさんのご利用、ありがとうございます！")
+    st.info("このツールが、あなたの世界を広げる一助となれば幸いです。\n\n下のボタンから応援ページに移動することで、翻訳を続けることができます。")
+    portal_url = "https://pray-power-is-god-and-cocoro.com/free3/continue.html?from=translator&unlocked=true"
+    st.link_button("応援ページに移動して、翻訳を続ける", portal_url, type="primary", use_container_width=True)
 
-    # --- 衝突回避のための接頭辞 ---
-    prefix = "translator_"
-    
-    # --- セッションステートの初期化 ---
-    if f"{prefix}results" not in st.session_state: st.session_state[f"{prefix}results"] = []
-    if f"{prefix}last_mic_id" not in st.session_state: st.session_state[f"{prefix}last_mic_id"] = None
-    if f"{prefix}text_to_process" not in st.session_state: st.session_state[f"{prefix}text_to_process"] = None
-    if f"{prefix}last_input" not in st.session_state: st.session_state[f"{prefix}last_input"] = ""
-
-    # --- UI表示 ---
+else:
+    # --- 通常モード ---
     st.info("マイクで日本語を話すか、テキストボックスに入力してください。ニュアンスの異なる3つの翻訳候補を提案します。")
-    with st.expander("💡 このツールのAIについて"):
-        st.markdown("このツールは、Googleの**Gemini 1.5 Flash**というAIモデルを使用しています。")
+    st.caption(f"🚀 あと {usage_limit - st.session_state.get(f'{prefix}usage_count', 0)} 回、提案を受けられます。")
     
     def handle_text_input():
         st.session_state[f"{prefix}text_to_process"] = st.session_state[f"{prefix}text_input_key"]
     
     col1, col2 = st.columns([1, 2])
-    with col1:
-        audio_info = mic_recorder(start_prompt="🎤 話し始める", stop_prompt="⏹️ 提案を受ける", key=f'{prefix}mic', format="webm")
-    with col2:
-        st.text_input("または、ここに日本語を入力してEnter...", key=f"{prefix}text_input_key", on_change=handle_text_input)
+    with col1: audio_info = mic_recorder(start_prompt="🎤 話し始める", stop_prompt="⏹️ 提案を受ける", key=f'{prefix}mic', format="webm")
+    with col2: st.text_input("または、ここに日本語を入力してEnter...", key=f"{prefix}text_input_key", on_change=handle_text_input)
 
-    # --- 処理のトリガー ---
     content_to_process = None
     if audio_info and audio_info['id'] != st.session_state[f"{prefix}last_mic_id"]:
         content_to_process = audio_info['bytes']
@@ -121,7 +47,6 @@ def show_tool(gemini_api_key):
         content_to_process = st.session_state[f"{prefix}text_to_process"]
         st.session_state[f"{prefix}text_to_process"] = None
 
-    # --- AI実行 ---
     if content_to_process and content_to_process != st.session_state[f"{prefix}last_input"]:
         st.session_state[f"{prefix}last_input"] = content_to_process
         if not gemini_api_key:
@@ -129,12 +54,12 @@ def show_tool(gemini_api_key):
         else:
             original, proposals_data = translate_with_gemini(content_to_process, gemini_api_key)
             if proposals_data and "candidates" in proposals_data:
+                st.session_state[f"{prefix}usage_count"] += 1
                 st.session_state[f"{prefix}results"].insert(0, {"original": original, "candidates": proposals_data["candidates"]})
                 st.rerun()
             else:
                 st.session_state[f"{prefix}last_input"] = ""
 
-    # --- 結果表示 ---
     if st.session_state[f"{prefix}results"]:
         st.divider()
         st.subheader("📜 翻訳履歴")
@@ -147,10 +72,10 @@ def show_tool(gemini_api_key):
                     for col_index, candidate in enumerate(result["candidates"]):
                         with cols[col_index]:
                             nuance = candidate.get('nuance', 'N/A')
-                            translation = candidate.get('translation', '翻訳を取得できませんでした')
+                            translation = candidate.get('translation', '翻訳エラー')
                             st.info(f"**{nuance}**")
-                            st.success(f"{translation}")
-
+                            st.success(translation)
+        
         if st.button("翻訳履歴をクリア", key=f"{prefix}clear_history"):
             st.session_state[f"{prefix}results"] = []
             st.session_state[f"{prefix}last_input"] = ""

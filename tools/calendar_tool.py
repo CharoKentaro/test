@@ -1,19 +1,20 @@
 # ===============================================================
-# ★★★ calendar_tool.py ＜デイリーパスワード版＞ ★★★
+# ★★★ calendar_tool.py ＜最終完成版＞ ★★★
 # ===============================================================
 import streamlit as st
 import google.generativeai as genai
 import json
-from datetime import datetime, timedelta, timezone # ★ 日付を扱う達人を召喚
+from datetime import datetime, timedelta, timezone
 import urllib.parse
 import pytz
 from streamlit_mic_recorder import mic_recorder
 import time
 
 # ===============================================================
-# 補助関数 (成功部分は、完全に保護)
+# 補助関数 (変更なし)
 # ===============================================================
 def create_google_calendar_url(details):
+    # ... (この中身は、完全に変更なし) ...
     try:
         jst = pytz.timezone('Asia/Tokyo')
         start_time_jst = jst.localize(datetime.fromisoformat(details['start_time']))
@@ -33,7 +34,7 @@ def create_google_calendar_url(details):
     return f"{base_url}&{urllib.parse.urlencode(params, quote_via=urllib.parse.quote)}"
 
 # ===============================================================
-# 専門家のメインの仕事（新しいシステムに換装）
+# 専門家のメインの仕事（最終完成）
 # ===============================================================
 def show_tool(gemini_api_key):
     st.header("📅 カレンダー登録", divider='rainbow')
@@ -46,8 +47,9 @@ def show_tool(gemini_api_key):
     if "cal_usage_count" not in st.session_state:
         st.session_state.cal_usage_count = 0
 
-    # --- 統合AI処理関数 (成功部分は、完全に保護) ---
+    # --- AI処理関数 (変更なし) ---
     def process_input(user_input):
+        # ... (この中身は、完全に変更なし) ...
         with st.chat_message("assistant"):
             if not gemini_api_key:
                 st.error("サイドバーでGemini APIキーを設定してください。")
@@ -99,26 +101,23 @@ def show_tool(gemini_api_key):
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
-    # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-    # ★★★ 新しい「運命の分岐」システムを、ここに移植 ★★★
-    # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-    usage_limit = 2
+    # --- 運命の分岐 ---
+    usage_limit = 2 # ★★★ ここで、いつでもリミットを変更できます ★★★
     is_limit_reached = st.session_state.get("cal_usage_count", 0) >= usage_limit
 
     st.write("---")
     if is_limit_reached:
-        # ★★★ 聖域（アンロック・モード）の表示 ★★★
-        st.success("🎉 たくさんの音声入力、ありがとうございます！")
+        # アンロック・モード
+        st.success("🎉 たくさんのご利用、ありがとうございます！")
         st.info("このAI秘書が、あなたの毎日を、少しでも豊かにできたなら幸いです。")
-        st.warning("音声入力を続けるには、応援ページで「今日の合言葉（4桁の数字）」を確認し、入力してください。")
+        st.warning("利用回数をリセットするには、応援ページで「今日の合言葉（4桁の数字）」を確認し、入力してください。")
         
         portal_url = "https://pray-power-is-god-and-cocoro.com/free3/continue.html"
         st.markdown(f'<a href="{portal_url}" target="_blank">応援ページで「今日の合言葉」を確認する →</a>', unsafe_allow_html=True)
         st.divider()
 
         password_input = st.text_input("ここに「今日の合言葉」を入力してください:", type="password", key="cal_password_input")
-        if st.button("音声入力の回数をリセットする", key="cal_unlock_button"):
-            # ★★★ 今日の正しい「4桁の数字」を自動生成 ★★★
+        if st.button("利用回数をリセットする", key="cal_unlock_button"):
             JST = timezone(timedelta(hours=+9))
             today_int = int(datetime.now(JST).strftime('%Y%m%d'))
             seed_str = st.secrets.get("unlock_seed", "0")
@@ -128,40 +127,42 @@ def show_tool(gemini_api_key):
             if password_input == correct_password:
                 st.session_state.cal_usage_count = 0
                 st.balloons()
-                st.success("ありがとうございます！音声入力の回数がリセットされました。")
+                st.success("ありがとうございます！利用回数がリセットされました。")
                 time.sleep(2)
                 st.rerun()
             else:
                 st.error("合言葉が違うようです。応援ページで、もう一度ご確認ください。")
     else:
-        # ★★★ 通常の音声入力モード ★★★
-        st.caption(f"🚀 あと {usage_limit - st.session_state.get('cal_usage_count', 0)} 回、音声入力ができます。（テキスト入力は無制限です）")
+        # 通常会話モード
+        st.caption(f"🚀 あと {usage_limit - st.session_state.get('cal_usage_count', 0)} 回、予定の登録ができます。")
         col1, col2 = st.columns(2)
         with col1:
             audio_info = mic_recorder(start_prompt="🎤 マイクで録音", stop_prompt="⏹️ 停止", key='cal_mic_recorder')
         with col2:
             uploaded_file = st.file_uploader("📁 音声ファイルをアップロード", type=['wav', 'mp3', 'm4a', 'flac'], key="cal_uploader")
 
-    # テキスト入力は、常に、ページ下部に、存在し続けます (成功部分は、完全に保護)
     text_prompt = st.chat_input("キーボードで予定を入力...", key="cal_text_input")
 
-    # --- 入力があった場合の処理 (成功部分は、完全に保護) ---
+    # --- 入力があった場合の処理 ---
     user_input_data = None
-    input_type_is_voice = False
-
-    if text_prompt:
+    
+    # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+    # ★★★ これが、最後の、そして最も公平な、門番です ★★★
+    # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+    if is_limit_reached:
+        # 上限に達している場合、以下の処理は一切行わない
+        pass
+    elif text_prompt:
         user_input_data = text_prompt
-    elif not is_limit_reached and audio_info and audio_info['id'] != st.session_state.cal_last_mic_id:
+    elif audio_info and audio_info['id'] != st.session_state.cal_last_mic_id:
         st.session_state.cal_last_mic_id = audio_info['id']
         user_input_data = audio_info['bytes']
-        input_type_is_voice = True
-    elif not is_limit_reached and uploaded_file and uploaded_file.name != st.session_state.cal_last_file_name:
+    elif uploaded_file and uploaded_file.name != st.session_state.cal_last_file_name:
         st.session_state.cal_last_file_name = uploaded_file.name
         user_input_data = uploaded_file.getvalue()
-        input_type_is_voice = True
 
     if user_input_data:
-        if input_type_is_voice:
-            st.session_state.cal_usage_count += 1
+        # どんな入力方法でも、必ず回数をカウント！
+        st.session_state.cal_usage_count += 1
         process_input(user_input_data)
         st.rerun()

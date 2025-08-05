@@ -1,83 +1,157 @@
 # ===============================================================
-# ★★★ translator_tool.py （復元版） ★★★
+# ★★★ translator_tool.py ＜ちゃろさん作・最終完成版＞ ★★★
 # ===============================================================
 import streamlit as st
 import google.generativeai as genai
 import time
+import json
+from streamlit_mic_recorder import mic_recorder
+from google.api_core import exceptions
 
-# --- このツール専用のプロンプト作成関数 ---
-def create_translator_prompt(target_language, source_text):
-    return f"""
-# 命令
-あなたは、世界最高の翻訳家です。
-以下のテキストを、寸分の狂いもなく、自然で流暢な「{target_language}」に翻訳してください。
+# --- 補助関数 (ちゃろさんの叡智) ---
+def translate_with_gemini(content_to_process, api_key):
+    if not content_to_process or not api_key:
+        return None, None
+    try:
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel('gemini-1.5-flash-latest')
 
-# 翻訳対象のテキスト
-{source_text}
+        if isinstance(content_to_process, bytes):
+            with st.spinner("（あなたの声を、言葉に、変えています...）"):
+                audio_part = {"mime_type": "audio/webm", "data": content_to_process}
+                transcription_prompt = "この日本語の音声を、できる限り正確に、文字に書き起こしてください。書き起こした日本語テキストのみを回答してください。"
+                transcription_response = model.generate_content([transcription_prompt, audio_part])
+                processed_text = transcription_response.text.strip()
+            if not processed_text:
+                st.error("あなたの声を、言葉に、変えることができませんでした。もう一度お試しください。")
+                return None, None
+            original_input_display = f"{processed_text} (🎙️音声より)"
+        else:
+            processed_text = content_to_process
+            original_input_display = processed_text
 
-# 翻訳結果
-"""
+        with st.spinner("AIが、最適な、3つの、翻訳候補を、考えています..."):
+            system_prompt = """
+            # 命令書: 言語ニュアンスの、探求者としての、あなたの、責務
+            あなたは、プロフェッショナルな、翻訳アシスタントです。
+            あなたの、唯一の、任務は、ユーザーから、渡された、日本語を、分析し、ニュアンスの異なる、3つの、プロフェッショナルな、英訳候補を、生成し、以下の、JSON形式で、厳格に、出力することです。
+            ## JSON出力に関する、絶対的な、契約条件：
+            あなたの回答は、必ず、以下のJSON構造に、厳密に、従うこと。このJSONオブジェクト以外の、いかなるテキストも、絶対に、絶対に、含めてはならない。
+            ```json
+            {
+              "candidates": [
+                {
+                  "translation": "ここに、1つ目の、最も、標準的な、翻訳候補を記述します。",
+                  "nuance": "この翻訳が持つ、ニュアンス（例：「最も一般的」「フォーマル」など）を、簡潔に、説明します。"
+                },
+                {
+                  "translation": "ここに、2つ目の、少し、ニュアンスの異なる、翻訳候補を記述します。",
+                  "nuance": "この翻訳が持つ、ニュアンス（例：「より丁寧」「やや婉曲的」など）を、簡潔に、説明します。"
+                },
+                {
+                  "translation": "ここに、3つ目の、さらに、異なる、視点からの、翻訳候補を記述します。",
+                  "nuance": "この翻訳が持つ、ニュアンス（例：「最も簡潔」「直接的」など）を、簡潔に、説明します。"
+                }
+              ]
+            }
+            ```
+            ## 最重要ルール:
+            - `translation` は、必ず、プロフェッショナルな英語で、記述すること。
+            - `nuance` は、必ず、その、違いが、一目でわかる、**簡潔な【日本語】**で、記述すること。
+            """
+            request_contents = [system_prompt, processed_text]
+            response = model.generate_content(request_contents)
+            raw_response_text = response.text
+        
+        json_start_index = raw_response_text.find('{')
+        json_end_index = raw_response_text.rfind('}')
+        if json_start_index != -1 and json_end_index != -1:
+            pure_json_text = raw_response_text[json_start_index : json_end_index + 1]
+            try:
+                translated_proposals = json.loads(pure_json_text)
+                return original_input_display, translated_proposals
+            except json.JSONDecodeError:
+                st.error("AIが生成したデータの構造が破損していました。お手数ですが、もう一度お試しください。")
+                return None, None
+        else:
+            st.error("AIから予期せぬ形式の応答がありました。JSONデータが含まれていません。")
+            return None, None
+    except exceptions.ResourceExhausted:
+        st.error("APIキーの上限に達した可能性があります。少し時間をあけるか、明日以降に再試行してください。")
+        return None, None
+    except Exception as e:
+        st.error(f"AI処理中に予期せぬエラーが発生しました: {e}")
+        return None, None
 
-# --- ポータルから呼び出されるメイン関数 ---
+# ===============================================================
+# メインの仕事 (app.py との連携を考慮した、最終調整)
+# ===============================================================
 def show_tool(gemini_api_key):
     st.header("🤝 翻訳ツール", divider='rainbow')
 
-    # --- セッションステートの初期化 ---
-    # このツール専用のキーを接頭辞として使用する
+    # --- 衝突回避のための接頭辞 ---
     prefix = "translator_"
-    if f"{prefix}source_text" not in st.session_state:
-        st.session_state[f"{prefix}source_text"] = "ここに翻訳したい文章を入力してください。"
-        st.session_state[f"{prefix}target_language"] = "英語"
-        st.session_state[f"{prefix}translated_text"] = ""
+    
+    # --- セッションステートの初期化 ---
+    if f"{prefix}results" not in st.session_state: st.session_state[f"{prefix}results"] = []
+    if f"{prefix}last_mic_id" not in st.session_state: st.session_state[f"{prefix}last_mic_id"] = None
+    if f"{prefix}text_to_process" not in st.session_state: st.session_state[f"{prefix}text_to_process"] = None
+    if f"{prefix}last_input" not in st.session_state: st.session_state[f"{prefix}last_input"] = ""
 
-    # --- UIのレイアウト ---
-    col1, col2 = st.columns(2)
-
+    # --- UI表示 ---
+    st.info("マイクで日本語を話すか、テキストボックスに入力してください。ニュアンスの異なる3つの翻訳候補を提案します。")
+    with st.expander("💡 このツールのAIについて"):
+        st.markdown("このツールは、Googleの**Gemini 1.5 Flash**というAIモデルを使用しています。")
+    
+    def handle_text_input():
+        st.session_state[f"{prefix}text_to_process"] = st.session_state[f"{prefix}text_input_key"]
+    
+    col1, col2 = st.columns([1, 2])
     with col1:
-        st.subheader("原文")
-        # st.session_stateから値を取得して表示
-        source_text = st.text_area(
-            "翻訳したい文章を入力", 
-            value=st.session_state[f"{prefix}source_text"], 
-            height=300, 
-            key=f"{prefix}source_text_input"
-        )
-        
-        # ユーザーの入力をセッションステートに即時反映
-        st.session_state[f"{prefix}source_text"] = source_text
-
-        target_language = st.selectbox(
-            "何語に翻訳しますか？",
-            ("英語", "日本語", "中国語", "韓国語", "スペイン語", "フランス語"),
-            key=f"{prefix}target_language_select"
-        )
-        st.session_state[f"{prefix}target_language"] = target_language
-        
-        if st.button("この内容で翻訳する", type="primary", use_container_width=True):
-            if not gemini_api_key:
-                st.warning("サイドバーからGemini APIキーを設定してください。")
-            elif not source_text or source_text == "ここに翻訳したい文章を入力してください。":
-                st.warning("翻訳したい文章を入力してください。")
-            else:
-                try:
-                    with st.spinner(f"🧠 AIが{target_language}へ翻訳中..."):
-                        genai.configure(api_key=gemini_api_key)
-                        model = genai.GenerativeModel('gemini-1.5-flash-latest')
-                        prompt = create_translator_prompt(target_language, source_text)
-                        response = model.generate_content(prompt)
-                        # 翻訳結果をセッションステートに保存
-                        st.session_state[f"{prefix}translated_text"] = response.text
-                        st.toast("翻訳が完了しました！", icon="🎉")
-                except Exception as e:
-                    st.error(f"翻訳中にエラーが発生しました: {e}")
-
+        audio_info = mic_recorder(start_prompt="🎤 話し始める", stop_prompt="⏹️ 提案を受ける", key=f'{prefix}mic', format="webm")
     with col2:
-        st.subheader("翻訳結果")
-        # st.session_stateから翻訳結果を取得して表示
-        translated_text = st.text_area(
-            "翻訳結果がここに表示されます", 
-            value=st.session_state[f"{prefix}translated_text"], 
-            height=300, 
-            key=f"{prefix}translated_text_output",
-            disabled=True # 編集不可にする
-        )
+        st.text_input("または、ここに日本語を入力してEnter...", key=f"{prefix}text_input_key", on_change=handle_text_input)
+
+    # --- 処理のトリガー ---
+    content_to_process = None
+    if audio_info and audio_info['id'] != st.session_state[f"{prefix}last_mic_id"]:
+        content_to_process = audio_info['bytes']
+        st.session_state[f"{prefix}last_mic_id"] = audio_info['id']
+    elif st.session_state[f"{prefix}text_to_process"]:
+        content_to_process = st.session_state[f"{prefix}text_to_process"]
+        st.session_state[f"{prefix}text_to_process"] = None
+
+    # --- AI実行 ---
+    if content_to_process and content_to_process != st.session_state[f"{prefix}last_input"]:
+        st.session_state[f"{prefix}last_input"] = content_to_process
+        if not gemini_api_key:
+            st.error("サイドバーでGemini APIキーを設定してください。")
+        else:
+            original, proposals_data = translate_with_gemini(content_to_process, gemini_api_key)
+            if proposals_data and "candidates" in proposals_data:
+                st.session_state[f"{prefix}results"].insert(0, {"original": original, "candidates": proposals_data["candidates"]})
+                st.rerun()
+            else:
+                st.session_state[f"{prefix}last_input"] = ""
+
+    # --- 結果表示 ---
+    if st.session_state[f"{prefix}results"]:
+        st.divider()
+        st.subheader("📜 翻訳履歴")
+        for i, result in enumerate(st.session_state[f"{prefix}results"]):
+            with st.container(border=True):
+                st.markdown(f"**🇯🇵 あなたの入力:** {result['original']}")
+                if "candidates" in result and isinstance(result["candidates"], list):
+                    st.write("---")
+                    cols = st.columns(len(result["candidates"]))
+                    for col_index, candidate in enumerate(result["candidates"]):
+                        with cols[col_index]:
+                            nuance = candidate.get('nuance', 'N/A')
+                            translation = candidate.get('translation', '翻訳を取得できませんでした')
+                            st.info(f"**{nuance}**")
+                            st.success(f"{translation}")
+
+        if st.button("翻訳履歴をクリア", key=f"{prefix}clear_history"):
+            st.session_state[f"{prefix}results"] = []
+            st.session_state[f"{prefix}last_input"] = ""
+            st.rerun()

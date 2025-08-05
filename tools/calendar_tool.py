@@ -36,7 +36,7 @@ def create_google_calendar_url(details):
 # 専門家のメインの仕事（新しいシステムに換装）
 # ===============================================================
 def show_tool(gemini_api_key):
-    st.header("📅 AI秘書", divider='rainbow')
+    st.header("📅 カレンダー登録", divider='rainbow')
 
     # --- 状態管理の初期化 ---
     if "cal_messages" not in st.session_state:

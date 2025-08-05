@@ -1,9 +1,10 @@
 # ===============================================================
-# ★★★ okozukai_recorder_tool.py ＜スマホ対応・修正版＞ ★★★
+# ★★★ okozukai_recorder_tool.py ＜最終修正・スマホ完全対応版＞ ★★★
 # ===============================================================
 import streamlit as st
+# ★ お小遣いツール自身もLocalStorageを直接使うので、インポートは必要
 import google.generativeai as genai
-from streamlit_local_storage import LocalStorage
+from streamlit_local_storage import LocalStorage 
 import json
 from PIL import Image
 import pandas as pd
@@ -11,7 +12,7 @@ from datetime import datetime, timedelta, timezone
 import time
 
 # --- プロンプトや補助関数（省略） ---
-# (この部分は、ちゃろさんの元のコードから変更ありません)
+# (この部分は変更なし)
 GEMINI_PROMPT = """..."""
 def calculate_remaining_balance(monthly_allowance, total_spent):
     return monthly_allowance - total_spent
@@ -26,6 +27,7 @@ def show_tool(gemini_api_key):
     st.header("💰 お小遣い管理", divider='rainbow')
 
     try:
+        # ★ このツール内で保存処理を行うため、LocalStorageをインスタンス化
         localS = LocalStorage()
     except Exception as e:
         st.error(f"🚨 重大なエラー：ローカルストレージの初期化に失敗しました。エラー詳細: {e}")
@@ -37,21 +39,26 @@ def show_tool(gemini_api_key):
     key_total_spent = f"{prefix}total_spent"
     key_all_receipts = f"{prefix}all_receipt_data"
 
+    # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+    # ★★★ ここが、最も重要な初期化処理です ★★★
+    # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+    # ページがロードされるたびに、まずLocalStorageから値を取得しようと試みる
+    # これにより、ブラウザを閉じたりリロードしたりしても、前回保存した値が読み込まれる
     if f"{prefix}initialized" not in st.session_state:
-        # st.session_stateをLocalStorageからのデータで初期化
-        st.session_state[f"{prefix}monthly_allowance"] = float(localS.getItem(key_allowance) or 0.0)
-        st.session_state[f"{prefix}total_spent"] = float(localS.getItem(key_total_spent) or 0.0)
-        st.session_state[f"{prefix}all_receipts"] = localS.getItem(key_all_receipts) or []
+        st.session_state[key_allowance] = float(localS.getItem(key_allowance) or 0.0)
+        st.session_state[key_total_spent] = float(localS.getItem(key_total_spent) or 0.0)
+        st.session_state[key_all_receipts] = localS.getItem(key_all_receipts) or []
         st.session_state[f"{prefix}receipt_preview"] = None
         st.session_state[f"{prefix}usage_count"] = 0
         st.session_state[f"{prefix}initialized"] = True
 
+    # (これ以降、アンロックモード、確認モードの部分は変更ありません)
     usage_limit = 1
     is_limit_reached = st.session_state.get(f"{prefix}usage_count", 0) >= usage_limit
 
     if is_limit_reached:
-        # アンロック・モード
-        # (この部分は、完全に変更なし)
+        # アンロック・モード (変更なし)
+        # ...
         st.success("🎉 たくさんのご利用、ありがとうございます！")
         st.info("このツールが、あなたの家計管理の一助となれば幸いです。")
         st.warning("レシートの読み込みを続けるには、応援ページで「今日の合言葉（4桁の数字）」を確認し、入力してください。")
@@ -75,8 +82,8 @@ def show_tool(gemini_api_key):
                 st.error("合言葉が違うようです。応援ページで、もう一度ご確認ください。")
 
     elif st.session_state[f"{prefix}receipt_preview"]:
-        # 確認モード
-        # (この部分は、完全に変更なし)
+        # 確認モード (変更なし)
+        # ...
         st.subheader("📝 支出の確認")
         st.info("AIが読み取った内容を確認・修正し、問題なければ「確定」してください。")
         preview_data = st.session_state[f"{prefix}receipt_preview"]
@@ -91,8 +98,8 @@ def show_tool(gemini_api_key):
         edited_df = st.data_editor(df_items, num_rows="dynamic", column_config={"name": st.column_config.TextColumn("品物名", required=True, width="large"), "price": st.column_config.NumberColumn("金額（円）", format="%d円", required=True)}, key=f"{prefix}data_editor", use_container_width=True)
         st.divider()
         st.write("📊 **支出後の残高プレビュー**")
-        current_allowance = st.session_state[f"{prefix}monthly_allowance"]
-        current_spent = st.session_state[f"{prefix}total_spent"]
+        current_allowance = st.session_state[key_allowance]
+        current_spent = st.session_state[key_total_spent]
         projected_spent = current_spent + corrected_amount
         projected_balance = calculate_remaining_balance(current_allowance, projected_spent)
         col1, col2, col3 = st.columns(3)
@@ -102,11 +109,12 @@ def show_tool(gemini_api_key):
         st.divider()
         confirm_col, cancel_col = st.columns(2)
         if confirm_col.button("💰 この金額で支出を確定する", type="primary", use_container_width=True):
-            st.session_state[f"{prefix}total_spent"] += corrected_amount
+            st.session_state[key_total_spent] += corrected_amount
             new_receipt_record = {"date": datetime.now().strftime('%Y-%m-%d %H:%M'), "total_amount": corrected_amount, "items": edited_df.to_dict('records')}
-            st.session_state[f"{prefix}all_receipts"].append(new_receipt_record)
-            localS.setItem(key_total_spent, st.session_state[f"{prefix}total_spent"])
-            localS.setItem(key_all_receipts, st.session_state[f"{prefix}all_receipts"])
+            st.session_state[key_all_receipts].append(new_receipt_record)
+            # ★ 保存時にも、必ずユニークなkeyを指定する
+            localS.setItem(key_total_spent, st.session_state[key_total_spent], key="total_spent_storage")
+            localS.setItem(key_all_receipts, st.session_state[key_all_receipts], key="all_receipts_storage")
             st.session_state[f"{prefix}receipt_preview"] = None
             st.success(f"🎉 {corrected_amount:,.0f} 円の支出を記録しました！")
             st.balloons()
@@ -122,39 +130,36 @@ def show_tool(gemini_api_key):
         st.caption(f"🚀 あと {usage_limit - st.session_state.get(f'{prefix}usage_count', 0)} 回、レシートを読み込めます。")
 
         # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-        # ★★★ ここを、st.form を使った確実な方法に修正しました ★★★
+        # ★★★ ここを、app.pyの成功パターンに完全に準拠させました ★★★
         # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-        with st.expander("💳 今月のお小遣い設定", expanded=(st.session_state[f"{prefix}monthly_allowance"] == 0)):
-            # フォームで入力とボタンをグループ化し、誤動作を防ぐ
+        with st.expander("💳 今月のお小遣い設定", expanded=(st.session_state[key_allowance] == 0)):
+            # 1. st.formで全体を囲む
             with st.form(key=f"{prefix}allowance_form"):
                 new_allowance = st.number_input(
                     "今月のお小遣いを入力してください", 
-                    # valueには現在の設定値を正しく表示
-                    value=st.session_state[f"{prefix}monthly_allowance"], 
+                    value=st.session_state[key_allowance], 
                     step=1000.0, 
-                    min_value=0.0,
-                    key=f"{prefix}allowance_input" # キーを元のシンプルなものに戻す
+                    min_value=0.0
                 )
                 
-                # フォーム専用の送信ボタン
                 submitted = st.form_submit_button("この金額で設定する", use_container_width=True)
                 
-                # ボタンが押された時だけ、保存処理を実行
                 if submitted:
-                    st.session_state[f"{prefix}monthly_allowance"] = new_allowance
-                    localS.setItem(key_allowance, new_allowance)
+                    st.session_state[key_allowance] = new_allowance
+                    # 2. setItemに、ユニークなコンポーネントkeyを必ず指定する
+                    localS.setItem(key_allowance, new_allowance, key="allowance_storage")
                     st.success(f"今月のお小遣いを {new_allowance:,.0f} 円に設定しました！")
-                    # ユーザーがメッセージを確認するための短い待機時間
+                    # 3. スマホのブラウザに書き込み時間を確保するためのsleep
                     time.sleep(1)
-                    # 画面全体を再描画して、表示を最新の状態に更新
                     st.rerun()
         
-        # ... (これ以降のコードは、完全に変更なし) ...
         st.divider()
         st.subheader("📊 現在の状況")
-        current_allowance = st.session_state[f"{prefix}monthly_allowance"]
-        current_spent = st.session_state[f"{prefix}total_spent"]
+        current_allowance = st.session_state[key_allowance]
+        current_spent = st.session_state[key_total_spent]
         remaining_balance = calculate_remaining_balance(current_allowance, current_spent)
+        # (以降、変更なし)
+        # ...
         col1, col2, col3 = st.columns(3)
         col1.metric("今月の予算", f"{current_allowance:,.0f} 円")
         col2.metric("使った金額", f"{current_spent:,.0f} 円")
@@ -190,9 +195,9 @@ def show_tool(gemini_api_key):
                         if 'gemini_response' in locals(): st.code(gemini_response.text, language="text")
         st.divider()
         st.subheader("📜 支出履歴")
-        if st.session_state[f"{prefix}all_receipts"]:
+        if st.session_state[key_all_receipts]:
             display_list = []
-            for receipt in reversed(st.session_state[f'{prefix}all_receipts']):
+            for receipt in reversed(st.session_state[key_all_receipts]):
                 date = receipt.get('date', 'N/A')
                 total = receipt.get('total_amount', 0)
                 items = receipt.get('items', [])

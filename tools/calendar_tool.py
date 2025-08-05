@@ -102,7 +102,7 @@ def show_tool(gemini_api_key):
             st.markdown(message["content"])
 
     # --- 運命の分岐 ---
-    usage_limit = 2 # ★★★ ここで、いつでもリミットを変更できます ★★★
+    usage_limit = 1 # ★★★ ここで、いつでもリミットを変更できます ★★★
     is_limit_reached = st.session_state.get("cal_usage_count", 0) >= usage_limit
 
     st.write("---")

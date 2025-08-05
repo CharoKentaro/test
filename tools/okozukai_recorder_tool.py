@@ -1,5 +1,5 @@
 # ===============================================================
-# ★★★ okozukai_recorder_tool.py ＜修正版＞ ★★★
+# ★★★ okozukai_recorder_tool.py ＜スマホ対応・修正版＞ ★★★
 # ===============================================================
 import streamlit as st
 import google.generativeai as genai
@@ -122,32 +122,32 @@ def show_tool(gemini_api_key):
         st.caption(f"🚀 あと {usage_limit - st.session_state.get(f'{prefix}usage_count', 0)} 回、レシートを読み込めます。")
 
         # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-        # ★★★ ここが、修正された部分です ★★★
+        # ★★★ ここを、st.form を使った確実な方法に修正しました ★★★
         # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-        
-        # on_changeで呼び出すコールバック関数を定義
-        def update_allowance():
-            # number_inputの現在の値を取得
-            new_val = st.session_state[f"{prefix}allowance_input_onchange"]
-            # アプリの状態(session_state)とローカルストレージの両方に保存
-            st.session_state[f"{prefix}monthly_allowance"] = new_val
-            localS.setItem(key_allowance, new_val)
-            # 画面をリロードせず、右下にメッセージを表示
-            st.toast(f"✅ お小遣いを {new_val:,.0f} 円に設定しました！")
-
         with st.expander("💳 今月のお小遣い設定", expanded=(st.session_state[f"{prefix}monthly_allowance"] == 0)):
-            st.number_input(
-                "今月のお小遣いを入力してください（入力後にEnterキーか、枠外クリックで保存されます）",
-                # valueには、保存された正しい値を表示
-                value=st.session_state[f"{prefix}monthly_allowance"],
-                step=1000.0,
-                min_value=0.0,
-                # このキーで入力ウィジェットの現在の値にアクセス
-                key=f"{prefix}allowance_input_onchange",
-                # 値が変更されたら update_allowance 関数を呼び出す
-                on_change=update_allowance
-            )
-            # 「設定ボタン」は不要になったため削除しました。
+            # フォームで入力とボタンをグループ化し、誤動作を防ぐ
+            with st.form(key=f"{prefix}allowance_form"):
+                new_allowance = st.number_input(
+                    "今月のお小遣いを入力してください", 
+                    # valueには現在の設定値を正しく表示
+                    value=st.session_state[f"{prefix}monthly_allowance"], 
+                    step=1000.0, 
+                    min_value=0.0,
+                    key=f"{prefix}allowance_input" # キーを元のシンプルなものに戻す
+                )
+                
+                # フォーム専用の送信ボタン
+                submitted = st.form_submit_button("この金額で設定する", use_container_width=True)
+                
+                # ボタンが押された時だけ、保存処理を実行
+                if submitted:
+                    st.session_state[f"{prefix}monthly_allowance"] = new_allowance
+                    localS.setItem(key_allowance, new_allowance)
+                    st.success(f"今月のお小遣いを {new_allowance:,.0f} 円に設定しました！")
+                    # ユーザーがメッセージを確認するための短い待機時間
+                    time.sleep(1)
+                    # 画面全体を再描画して、表示を最新の状態に更新
+                    st.rerun()
         
         # ... (これ以降のコードは、完全に変更なし) ...
         st.divider()

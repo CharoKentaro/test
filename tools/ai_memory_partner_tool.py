@@ -113,7 +113,7 @@ def show_tool(gemini_api_key, localS_object=None):
 
     st.header("❤️ 認知予防ツール", divider='rainbow')
 
-    usage_limit = 3
+    usage_limit = 2
     is_limit_reached = st.session_state.get(usage_count_key, 0) >= usage_limit
     
     if is_limit_reached:

@@ -102,7 +102,7 @@ def show_tool(gemini_api_key):
     # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
     # ★★★ 新しい「運命の分岐」システムを、ここに移植 ★★★
     # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-    usage_limit = 5
+    usage_limit = 2
     is_limit_reached = st.session_state.get("cal_usage_count", 0) >= usage_limit
 
     st.write("---")

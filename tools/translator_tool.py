@@ -107,7 +107,7 @@ def show_tool(gemini_api_key):
     if is_limit_reached:
         st.success("🎉 たくさんのご利用、ありがとうございます！")
         st.info("このツールが、あなたの世界を広げる一助となれば幸いです。\n\n下のボタンから応援ページに移動することで、翻訳を続けることができます。")
-        portal_url = "https://pray-power-is-god-and-cocoro.com/free3/continue.html?from=translator&unlocked=true"
+        portal_url = "https://pray-power-is-god-and-cocoro.com/free3/continue2.html?from=translator&unlocked=true"
         st.link_button("応援ページに移動して、翻訳を続ける", portal_url, type="primary", use_container_width=True)
     
     else:

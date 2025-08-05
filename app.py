@@ -14,7 +14,7 @@ with st.sidebar:
     st.divider()
     tool_selection = st.radio(
         "利用するツールを選択してください:",
-        ("🤝 翻訳ツール", "💰 お小遣い管理", "📅 AI秘書", "📝 議事録作成", "🧠 賢者の記憶", "❤️ 認知予防ツール"),
+        ("🤝 翻訳ツール", "💰 お小遣い管理", "📅 カレンダー登録", "📝 議事録作成", "🧠 賢者の記憶", "❤️ 認知予防ツール"),
         key="tool_selection"
     )
     st.divider()
@@ -44,7 +44,7 @@ if st.session_state.tool_selection == "🤝 翻訳ツール":
     translator_tool.show_tool(gemini_api_key=st.session_state.get('gemini_api_key', ''))
 elif st.session_state.tool_selection == "💰 お小遣い管理":
     okozukai_recorder_tool.show_tool(gemini_api_key=st.session_state.get('gemini_api_key', ''))
-elif st.session_state.tool_selection == "📅 AI秘書":
+elif st.session_state.tool_selection == "📅 カレンダー登録":
     calendar_tool.show_tool(gemini_api_key=st.session_state.get('gemini_api_key', ''))
 elif st.session_state.tool_selection == "📝 議事録作成":
     gijiroku_tool.show_tool(gemini_api_key=st.session_state.get('gemini_api_key', ''))

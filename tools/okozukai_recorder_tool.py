@@ -1,13 +1,16 @@
+# ===============================================================
+# ★★★ okozukai_recorder_tool.py ＜デイリーパスワード版＞ ★★★
+# ===============================================================
 import streamlit as st
 import google.generativeai as genai
 from streamlit_local_storage import LocalStorage
 import json
 from PIL import Image
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta, timezone # ★ 日付を扱う達人を召喚
 import time
 
-# --- このツール専用のプロンプト ---
+# --- このツール専用のプロンプト (成功部分は、完全に保護) ---
 GEMINI_PROMPT = """
 あなたは、レシートの画像を直接解析する、超優秀な経理アシスタントAIです。
 # 指示
@@ -29,7 +32,7 @@ GEMINI_PROMPT = """
 }
 """
 
-# --- このツール専用の関数 ---
+# --- このツール専用の関数 (成功部分は、完全に保護) ---
 def calculate_remaining_balance(monthly_allowance, total_spent):
     return monthly_allowance - total_spent
 
@@ -39,7 +42,7 @@ def format_balance_display(balance):
     else:
         return f"🔴 **{abs(balance):,.0f} 円 (予算オーバー)**"
 
-# --- ポータルから呼び出されるメイン関数 ---
+# --- ポータルから呼び出されるメイン関数 (新しいシステムに換装) ---
 def show_tool(gemini_api_key):
     st.header("💰 お小遣い管理", divider='rainbow')
 
@@ -49,15 +52,6 @@ def show_tool(gemini_api_key):
         st.error(f"🚨 重大なエラー：ローカルストレージの初期化に失敗しました。エラー詳細: {e}")
         st.stop()
         
-    # --- 【帰還者の祝福】 ---
-    if st.query_params.get("unlocked") == "true":
-        st.session_state[f"okozukai_usage_count"] = 0
-        st.query_params.clear()
-        st.toast("おかえりなさい！レシートの読み込み回数がリセットされました。")
-        st.balloons()
-        time.sleep(1)
-        st.rerun()
-
     prefix = "okozukai_"
     # --- 既存の初期化 ---
     if f"{prefix}initialized" not in st.session_state:
@@ -67,22 +61,45 @@ def show_tool(gemini_api_key):
         st.session_state[f"{prefix}all_receipts"] = localS.getItem("okozukai_all_receipt_data") or []
         st.session_state[f"{prefix}initialized"] = True
     
-    # --- 【門番の、存在保証】 ---
     if f"{prefix}usage_count" not in st.session_state:
         st.session_state[f"{prefix}usage_count"] = 0
 
-    # --- 【運命の、分岐路】 ---
-    usage_limit = 5  # テストのため、2回に設定
+    # ★★★ リミット回数を、ここで定義 ★★★
+    usage_limit = 5 # ←←← ちゃろさんが、いつでも、ここの数字を変えられます！
+
+    # --- 運命の分岐 ---
     is_limit_reached = st.session_state.get(f"{prefix}usage_count", 0) >= usage_limit
 
     if is_limit_reached:
+        # ★★★ 聖域（アンロック・モード）の表示 ★★★
         st.success("🎉 たくさんのご利用、ありがとうございます！")
-        st.info("このツールが、あなたの、家計管理の、一助となれば幸いです。\n\n下のボタンから応援ページに移動することで、レシートの読み込みを続けることができます。")
+        st.info("このツールが、あなたの家計管理の一助となれば幸いです。")
+        st.warning("レシートの読み込みを続けるには、応援ページで「今日の合言葉（4桁の数字）」を確認し、入力してください。")
+        
         portal_url = "https://pray-power-is-god-and-cocoro.com/free3/continue.html"
-        st.link_button("応援ページに移動して、読み込みを続ける", portal_url, type="primary")
+        st.markdown(f'<a href="{portal_url}" target="_blank">応援ページで「今日の合言葉」を確認する →</a>', unsafe_allow_html=True)
+        st.divider()
+
+        password_input = st.text_input("ここに「今日の合言葉」を入力してください:", type="password", key=f"{prefix}password_input")
+        if st.button("レシートの読み込み回数をリセットする", key=f"{prefix}unlock_button"):
+            # ★★★ 今日の正しい「4桁の数字」を自動生成 ★★★
+            JST = timezone(timedelta(hours=+9))
+            today_int = int(datetime.now(JST).strftime('%Y%m%d'))
+            seed_str = st.secrets.get("unlock_seed", "0")
+            seed_int = int(seed_str) if seed_str.isdigit() else 0
+            correct_password = str((today_int + seed_int) % 10000).zfill(4)
+            
+            if password_input == correct_password:
+                st.session_state[f"{prefix}usage_count"] = 0
+                st.balloons()
+                st.success("ありがとうございます！レシートの読み込み回数がリセットされました。")
+                time.sleep(2)
+                st.rerun()
+            else:
+                st.error("合言葉が違うようです。応援ページで、もう一度ご確認ください。")
 
     elif st.session_state[f"{prefix}receipt_preview"]:
-        # --- 確認モード ---
+        # --- 確認モード (成功部分は、完全に保護) ---
         st.subheader("📝 支出の確認")
         st.info("AIが読み取った内容を確認・修正し、問題なければ「確定」してください。")
         preview_data = st.session_state[f"{prefix}receipt_preview"]
@@ -123,9 +140,9 @@ def show_tool(gemini_api_key):
             st.rerun()
             
     else:
-        # --- 通常モード ---
+        # --- 通常モード (成功部分は、完全に保護) ---
         st.info("レシートを登録して、今月使えるお金を管理しよう！")
-        st.caption(f"🚀 あと {usage_limit - st.session_state.get(f'{prefix}usage_count', 0)} 回、レシートを読み込めます。応援後、リセットされます。")
+        st.caption(f"🚀 あと {usage_limit - st.session_state.get(f'{prefix}usage_count', 0)} 回、レシートを読み込めます。")
 
         with st.expander("💳 今月のお小遣い設定", expanded=(st.session_state[f"{prefix}monthly_allowance"] == 0)):
              with st.form(key=f"{prefix}allowance_form"):
@@ -134,10 +151,6 @@ def show_tool(gemini_api_key):
                     st.session_state[f"{prefix}monthly_allowance"] = new_allowance
                     localS.setItem("okozukai_monthly_allowance", new_allowance, key=f"{prefix}storage_allowance")
                     st.success(f"今月のお小遣いを {new_allowance:,.0f} 円に設定しました！")
-                    
-                    # ★★★ 最高の、おもてなしは『速度』。1秒の、待ちは、もはや、不要です ★★★
-                    # time.sleep(1) 
-                    
                     st.rerun()
         
         st.divider()
@@ -158,7 +171,7 @@ def show_tool(gemini_api_key):
         
         st.divider()
         st.subheader("📸 レシートを登録する")
-        uploaded_file = st.file_uploader("📁 レシート画像をアップロード", type=['png', 'jpg', 'jpeg'])
+        uploaded_file = st.file_uploader("📁 レシート画像をアップロード", type=['png', 'jpg', 'jpeg'], key=f"{prefix}uploader")
         if uploaded_file:
             st.image(uploaded_file, caption="解析対象のレシート", width=300)
             if st.button("⬆️ このレシートを解析する", use_container_width=True, type="primary"):
@@ -174,7 +187,6 @@ def show_tool(gemini_api_key):
                             extracted_data = json.loads(cleaned_text)
                         
                         st.session_state[f"{prefix}usage_count"] += 1
-
                         st.session_state[f"{prefix}receipt_preview"] = {"total_amount": float(extracted_data.get("total_amount", 0)), "items": extracted_data.get("items", [])}
                         st.rerun()
                     except Exception as e:

@@ -7,6 +7,7 @@ import time
 import json
 from streamlit_mic_recorder import mic_recorder
 from google.api_core import exceptions
+from datetime import datetime, timezone, timedelta # JSTの定義に必要なため追加
 
 # --- 補助関数 (ちゃろさんの高機能版) ---
 def translate_with_gemini(content_to_process, api_key):
@@ -74,6 +75,7 @@ def translate_with_gemini(content_to_process, api_key):
         else:
             st.error("AIから予期せぬ形式の応答がありました。")
             return None, None
+    # ▼▼▼【修正点1】このexceptブロックをtryブロックと同じ階層にインデントしました ▼▼▼
     except exceptions.ResourceExhausted:
         st.error("APIキーの上限に達したようです。")
         return None, None
@@ -98,85 +100,86 @@ def show_tool(gemini_api_key):
     usage_limit = 1
     is_limit_reached = st.session_state.get(f"{prefix}usage_count", 0) >= usage_limit
     
-   # --- UIロジックの分岐 ---
+    # ▼▼▼【修正点2】ここから下のUIロジック全体を show_tool 関数内に収まるようにインデントしました ▼▼▼
+    # --- UIロジックの分岐 ---
     if is_limit_reached:
-    # ★★★ ここが、新しくなった「合言葉システム」です ★★★
-    st.success("🎉 たくさんのご利用、ありがとうございます！")
-    st.info("このツールが、あなたの世界を広げる一助となれば幸いです。")
-    st.warning("翻訳を続けるには、応援ページで「今日の合言葉（4桁の数字）」を確認し、入力してください。")
-    
-    portal_url = "https://pray-power-is-god-and-cocoro.com/free3/continue2.html"
-    st.markdown(f'<a href="{portal_url}" target="_blank">応援ページで「今日の合言葉」を確認する →</a>', unsafe_allow_html=True)
-    st.divider()
-
-    with st.form("translator_password_form"):
-        password_input = st.text_input("ここに「今日の合言葉」を入力してください:", type="password")
-        if st.form_submit_button("利用回数をリセットする", use_container_width=True):
-            JST = timezone(timedelta(hours=+9))
-            today_int = int(datetime.now(JST).strftime('%Y%m%d'))
-            seed_str = st.secrets.get("unlock_seed", "0")
-            seed_int = int(seed_str) if seed_str.isdigit() else 0
-            correct_password = str((today_int + seed_int) % 10000).zfill(4)
-            
-            if password_input == correct_password:
-                st.session_state[f"{prefix}usage_count"] = 0
-                st.balloons()
-                st.success("ありがとうございます！利用回数がリセットされました。")
-                time.sleep(2)
-                st.rerun()
-            else:
-                st.error("合言葉が違うようです。応援ページで、もう一度ご確認ください。")
-
-else:
-    # --- 通常モード ---
-    st.info("マイクで日本語を話すか、テキストボックスに入力してください。ニュアンスの異なる3つの翻訳候補を提案します。")
-    st.caption(f"🚀 あと {usage_limit - st.session_state.get(f'{prefix}usage_count', 0)} 回、提案を受けられます。")
-    
-    def handle_text_input():
-        st.session_state[f"{prefix}text_to_process"] = st.session_state[f"{prefix}text_input_key"]
-    
-    col1, col2 = st.columns([1, 2])
-    with col1: audio_info = mic_recorder(start_prompt="🎤 話し始める", stop_prompt="⏹️ 提案を受ける", key=f'{prefix}mic', format="webm")
-    with col2: st.text_input("または、ここに日本語を入力してEnter...", key=f"{prefix}text_input_key", on_change=handle_text_input)
-
-    content_to_process = None
-    if audio_info and audio_info['id'] != st.session_state[f"{prefix}last_mic_id"]:
-        content_to_process = audio_info['bytes']
-        st.session_state[f"{prefix}last_mic_id"] = audio_info['id']
-    elif st.session_state[f"{prefix}text_to_process"]:
-        content_to_process = st.session_state[f"{prefix}text_to_process"]
-        st.session_state[f"{prefix}text_to_process"] = None
-
-    if content_to_process and content_to_process != st.session_state[f"{prefix}last_input"]:
-        st.session_state[f"{prefix}last_input"] = content_to_process
-        if not gemini_api_key:
-            st.error("サイドバーでGemini APIキーを設定してください。")
-        else:
-            original, proposals_data = translate_with_gemini(content_to_process, gemini_api_key)
-            if proposals_data and "candidates" in proposals_data:
-                st.session_state[f"{prefix}usage_count"] += 1
-                st.session_state[f"{prefix}results"].insert(0, {"original": original, "candidates": proposals_data["candidates"]})
-                st.rerun()
-            else:
-                st.session_state[f"{prefix}last_input"] = ""
-
-    if st.session_state[f"{prefix}results"]:
-        st.divider()
-        st.subheader("📜 翻訳履歴")
-        for i, result in enumerate(st.session_state[f"{prefix}results"]):
-            with st.container(border=True):
-                st.markdown(f"**🇯🇵 あなたの入力:** {result['original']}")
-                if "candidates" in result and isinstance(result["candidates"], list):
-                    st.write("---")
-                    cols = st.columns(len(result["candidates"]))
-                    for col_index, candidate in enumerate(result["candidates"]):
-                        with cols[col_index]:
-                            nuance = candidate.get('nuance', 'N/A')
-                            translation = candidate.get('translation', '翻訳エラー')
-                            st.info(f"**{nuance}**")
-                            st.success(translation)
+        # ★★★ ここが、新しくなった「合言葉システム」です ★★★
+        st.success("🎉 たくさんのご利用、ありがとうございます！")
+        st.info("このツールが、あなたの世界を広げる一助となれば幸いです。")
+        st.warning("翻訳を続けるには、応援ページで「今日の合言葉（4桁の数字）」を確認し、入力してください。")
         
-        if st.button("翻訳履歴をクリア", key=f"{prefix}clear_history"):
-            st.session_state[f"{prefix}results"] = []
-            st.session_state[f"{prefix}last_input"] = ""
-            st.rerun()
+        portal_url = "https://pray-power-is-god-and-cocoro.com/free3/continue2.html"
+        st.markdown(f'<a href="{portal_url}" target="_blank">応援ページで「今日の合言葉」を確認する →</a>', unsafe_allow_html=True)
+        st.divider()
+
+        with st.form("translator_password_form"):
+            password_input = st.text_input("ここに「今日の合言葉」を入力してください:", type="password")
+            if st.form_submit_button("利用回数をリセットする", use_container_width=True):
+                JST = timezone(timedelta(hours=+9))
+                today_int = int(datetime.now(JST).strftime('%Y%m%d'))
+                seed_str = st.secrets.get("unlock_seed", "0")
+                seed_int = int(seed_str) if seed_str.isdigit() else 0
+                correct_password = str((today_int + seed_int) % 10000).zfill(4)
+                
+                if password_input == correct_password:
+                    st.session_state[f"{prefix}usage_count"] = 0
+                    st.balloons()
+                    st.success("ありがとうございます！利用回数がリセットされました。")
+                    time.sleep(2)
+                    st.rerun()
+                else:
+                    st.error("合言葉が違うようです。応援ページで、もう一度ご確認ください。")
+
+    else:
+        # --- 通常モード ---
+        st.info("マイクで日本語を話すか、テキストボックスに入力してください。ニュアンスの異なる3つの翻訳候補を提案します。")
+        st.caption(f"🚀 あと {usage_limit - st.session_state.get(f'{prefix}usage_count', 0)} 回、提案を受けられます。")
+        
+        def handle_text_input():
+            st.session_state[f"{prefix}text_to_process"] = st.session_state[f"{prefix}text_input_key"]
+        
+        col1, col2 = st.columns([1, 2])
+        with col1: audio_info = mic_recorder(start_prompt="🎤 話し始める", stop_prompt="⏹️ 提案を受ける", key=f'{prefix}mic', format="webm")
+        with col2: st.text_input("または、ここに日本語を入力してEnter...", key=f"{prefix}text_input_key", on_change=handle_text_input)
+
+        content_to_process = None
+        if audio_info and audio_info['id'] != st.session_state[f"{prefix}last_mic_id"]:
+            content_to_process = audio_info['bytes']
+            st.session_state[f"{prefix}last_mic_id"] = audio_info['id']
+        elif st.session_state[f"{prefix}text_to_process"]:
+            content_to_process = st.session_state[f"{prefix}text_to_process"]
+            st.session_state[f"{prefix}text_to_process"] = None
+
+        if content_to_process and content_to_process != st.session_state[f"{prefix}last_input"]:
+            st.session_state[f"{prefix}last_input"] = content_to_process
+            if not gemini_api_key:
+                st.error("サイドバーでGemini APIキーを設定してください。")
+            else:
+                original, proposals_data = translate_with_gemini(content_to_process, gemini_api_key)
+                if proposals_data and "candidates" in proposals_data:
+                    st.session_state[f"{prefix}usage_count"] += 1
+                    st.session_state[f"{prefix}results"].insert(0, {"original": original, "candidates": proposals_data["candidates"]})
+                    st.rerun()
+                else:
+                    st.session_state[f"{prefix}last_input"] = ""
+
+        if st.session_state[f"{prefix}results"]:
+            st.divider()
+            st.subheader("📜 翻訳履歴")
+            for i, result in enumerate(st.session_state[f"{prefix}results"]):
+                with st.container(border=True):
+                    st.markdown(f"**🇯🇵 あなたの入力:** {result['original']}")
+                    if "candidates" in result and isinstance(result["candidates"], list):
+                        st.write("---")
+                        cols = st.columns(len(result["candidates"]))
+                        for col_index, candidate in enumerate(result["candidates"]):
+                            with cols[col_index]:
+                                nuance = candidate.get('nuance', 'N/A')
+                                translation = candidate.get('translation', '翻訳エラー')
+                                st.info(f"**{nuance}**")
+                                st.success(translation)
+            
+            if st.button("翻訳履歴をクリア", key=f"{prefix}clear_history"):
+                st.session_state[f"{prefix}results"] = []
+                st.session_state[f"{prefix}last_input"] = ""
+                st.rerun()

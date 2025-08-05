@@ -1,42 +1,62 @@
+# ===============================================================
+# ★★★ kensha_no_kioku_tool.py ＜デイリーパスワード版＞ ★★★
+# ===============================================================
 import streamlit as st
 import google.generativeai as genai
 import json
 import time
+from datetime import datetime, timedelta, timezone # ★ 日付を扱う達人を召喚
 import pandas as pd
 
 # ===============================================================
-# 専門家のメインの仕事 (応援システムを戴冠)
+# 専門家のメインの仕事 (新しいシステムに換装)
 # ===============================================================
 def show_tool(gemini_api_key):
     st.header("🧠 賢者の記憶", divider='rainbow')
-
-    # --- 【帰還者の祝福】 ---
-    if st.query_params.get("unlocked") == "true":
-        st.session_state["kensha_usage_count"] = 0
-        st.query_params.clear()
-        st.toast("おかえりなさい！分析回数がリセットされました。")
-        st.balloons()
-        time.sleep(1)
-        st.rerun()
 
     # --- セッションステートの初期化 ---
     prefix = "kensha_"
     if f"{prefix}analysis_result" not in st.session_state:
         st.session_state[f"{prefix}analysis_result"] = None
-    
-    # --- 【門番の存在保証】 ---
     if f"{prefix}usage_count" not in st.session_state:
         st.session_state[f"{prefix}usage_count"] = 0
+    # ★ コンテキスト情報をセッションで保持
+    if f"{prefix}context" not in st.session_state:
+        st.session_state[f"{prefix}context"] = {}
 
-    # --- 【運命の分岐路】 ---
-    usage_limit = 3
+    # ★★★ リミット回数を、ここで定義 ★★★
+    usage_limit = 1 # ←←← ちゃろさんが、いつでも、ここの数字を変えられます！
+    
+    # --- 運命の分岐 ---
     is_limit_reached = st.session_state.get(f"{prefix}usage_count", 0) >= usage_limit
 
     if is_limit_reached:
+        # ★★★ 聖域（アンロック・モード）の表示 ★★★
         st.success("🎉 たくさんのご利用、ありがとうございます！")
-        st.info("この『賢者の記憶』が、あなたの、未来を、創造する、一助となれば幸いです。\n\n下のボタンから応援ページに移動することで、分析を続けることができます。")
+        st.info("この『賢者の記憶』が、あなたの未来を創造する一助となれば幸いです。")
+        st.warning("分析を続けるには、応援ページで「今日の合言葉（4桁の数字）」を確認し、入力してください。")
+        
         portal_url = "https://pray-power-is-god-and-cocoro.com/free3/continue.html"
-        st.link_button("応援ページに移動して、分析を続ける", portal_url, type="primary")
+        st.markdown(f'<a href="{portal_url}" target="_blank">応援ページで「今日の合言葉」を確認する →</a>', unsafe_allow_html=True)
+        st.divider()
+
+        password_input = st.text_input("ここに「今日の合言葉」を入力してください:", type="password", key=f"{prefix}password_input")
+        if st.button("分析回数をリセットする", key=f"{prefix}unlock_button"):
+            # ★★★ 今日の正しい「4桁の数字」を自動生成 ★★★
+            JST = timezone(timedelta(hours=+9))
+            today_int = int(datetime.now(JST).strftime('%Y%m%d'))
+            seed_str = st.secrets.get("unlock_seed", "0")
+            seed_int = int(seed_str) if seed_str.isdigit() else 0
+            correct_password = str((today_int + seed_int) % 10000).zfill(4)
+            
+            if password_input == correct_password:
+                st.session_state[f"{prefix}usage_count"] = 0
+                st.balloons()
+                st.success("ありがとうございます！分析回数がリセットされました。")
+                time.sleep(2)
+                st.rerun()
+            else:
+                st.error("合言葉が違うようです。応援ページで、もう一度ご確認ください。")
 
     else:
         # --- 通常モード (上限に達していない場合) ---
@@ -45,32 +65,39 @@ def show_tool(gemini_api_key):
         AIが単なる議事録を超えた、未来を創造するための戦略的分析レポートを生成します。
         """)
         st.warning("長時間の音声ファイルは、処理に時間がかかったり、サーバーのメモリ制限によりエラーが発生する可能性があります。")
-        st.caption(f"🚀 あと {usage_limit - st.session_state.get(f'{prefix}usage_count', 0)} 回、分析できます。応援後、リセットされます。")
+        st.caption(f"🚀 あと {usage_limit - st.session_state.get(f'{prefix}usage_count', 0)} 回、分析できます。")
 
-        # --- STEP 1: コンテキスト入力 ---
+        # --- STEP 1: コンテキスト入力 (成功部分は、完全に保護) ---
         st.subheader("STEP 1: あなたの状況を教えてください")
         with st.form(key=f"{prefix}context_form"):
             st.markdown("AIは、以下の情報を基に、あなただけの、分析を行います。")
-            business_goal = st.text_input("あなたのビジネス目標", placeholder="例：今四半期の、売上を、20%向上させる")
-            current_challenges = st.text_area("現在、直面している課題", placeholder="例：新規顧客の、獲得単価が、高騰している。競合製品の、値下げ攻勢が、激しい。")
-            meta_prompt = st.text_area("AIへの、特別な、追加指示（任意）", placeholder="例：特に、若年層向けの、マーケティング戦略に、重点を、置いて、分析してほしい。")
+            business_goal = st.text_input("あなたのビジネス目標", placeholder="例：今四半期の、売上を、20%向上させる", value=st.session_state[f"{prefix}context"].get("business_goal", ""))
+            current_challenges = st.text_area("現在、直面している課題", placeholder="例：新規顧客の、獲得単価が、高騰している。競合製品の、値下げ攻勢が、激しい。", value=st.session_state[f"{prefix}context"].get("current_challenges", ""))
+            meta_prompt = st.text_area("AIへの、特別な、追加指示（任意）", placeholder="例：特に、若年層向けの、マーケティング戦略に、重点を、置いて、分析してほしい。", value=st.session_state[f"{prefix}context"].get("meta_prompt", ""))
             
             form_submit_button = st.form_submit_button("この内容で、コンテキストを設定する")
             if form_submit_button:
+                # ★ コンテキスト情報をセッションに保存
+                st.session_state[f"{prefix}context"] = {
+                    "business_goal": business_goal,
+                    "current_challenges": current_challenges,
+                    "meta_prompt": meta_prompt
+                }
                 st.success("コンテキストを、AIに、伝えました。次に、STEP 2で、音声ファイルを、アップロードしてください。")
 
-        # --- STEP 2: 音声ファイル入力 ---
+        # --- STEP 2: 音声ファイル入力 (成功部分は、完全に保護) ---
         st.divider()
         st.subheader("STEP 2: 分析対象の、会議音声ファイルを、アップロード")
         uploaded_file = st.file_uploader("議事録を作成したい音声ファイルをアップロードしてください:", type=['wav', 'mp3', 'm4a', 'flac'], key=f"{prefix}uploader")
         
         if st.button("この会議から『賢者の記憶』を生成する", key=f"{prefix}submit_button", type="primary"):
+            context = st.session_state[f"{prefix}context"]
             if not gemini_api_key:
                 st.error("サイドバーでGemini APIキーを設定してください。")
             elif uploaded_file is None:
                 st.warning("音声ファイルをアップロードしてください。")
-            elif not business_goal or not current_challenges:
-                st.warning("STEP 1の「ビジネス目標」と「課題」を入力してください。")
+            elif not context.get("business_goal") or not context.get("current_challenges"):
+                st.warning("STEP 1の「ビジネス目標」と「課題」を、入力して、「コンテキストを設定する」ボタンを押してください。")
             else:
                 with st.spinner("賢者が、あなたの、過去と、現在を、深く、瞑想し、未来を、紡いでいます..."):
                     try:
@@ -86,9 +113,9 @@ def show_tool(gemini_api_key):
                         ## あなたの、唯一無二の、任務：ユーザーから、渡された、『会議の、音声』と、彼らが、提供する、以下の【ビジネス・コンテキスト】の、両方を、全身全霊で、受け止めよ。そして、その、全てを、統合的に、分析し、指定された、JSON形式で、厳格に、出力すること。
                         ## 【最重要】ユーザーが、提供する、ビジネス・コンテキスト：
                         {{
-                          "business_goal": "{business_goal}",
-                          "current_challenges": "{current_challenges}",
-                          "meta_prompt": "{meta_prompt}"
+                          "business_goal": "{context.get('business_goal')}",
+                          "current_challenges": "{context.get('current_challenges')}",
+                          "meta_prompt": "{context.get('meta_prompt')}"
                         }}
                         ## JSON出力に関する、絶対的な、契約条件：あなたの回答は、必ず、以下の、巨大な、一つの、JSONオブジェクトに、厳密に、従うこと。この、JSONオブジェクト以外の、いかなるテキストも、絶対に、絶対に、含めてはならない。
                         ```json
@@ -100,16 +127,12 @@ def show_tool(gemini_api_key):
                         }}
                         ```
                         """
-                        
                         response = model.generate_content([system_prompt, audio_part])
 
                         if response.text:
-                            # ★★★【通行料の徴収】★★★
                             st.session_state[f"{prefix}usage_count"] += 1
-                            
                             json_text = response.text.strip().lstrip("```json").rstrip("```")
                             st.session_state[f"{prefix}analysis_result"] = json.loads(json_text)
-                            
                             if st.session_state.get(f"{prefix}usage_count", 0) >= usage_limit:
                                 st.rerun()
                         else:
@@ -122,7 +145,7 @@ def show_tool(gemini_api_key):
                     except Exception as e:
                         st.error(f"分析中にエラーが発生しました: {e}")
 
-    # --- STEP 3: 『賢者の記憶』の、顕現（結果表示） ---
+    # --- STEP 3: 『賢者の記憶』の、顕現（成功部分は、完全に保護） ---
     if st.session_state[f"{prefix}analysis_result"]:
         st.divider()
         st.success("賢者の、記憶が、解放されました。")
@@ -165,7 +188,6 @@ def show_tool(gemini_api_key):
                 st.warning(f"**盲点:** {challenge.get('blind_spots', 'N/A')}")
                 st.info(f"**別の視点:** {challenge.get('alternative_perspectives', 'N/A')}")
 
-
         with tab2:
             st.subheader("書記官の、記録")
             transcript = result.get("full_transcript", "文字起こしに失敗しました。")
@@ -190,13 +212,16 @@ def show_tool(gemini_api_key):
         
         with tab4:
             st.subheader("実行官の、指令書")
-            todos = result.get("actionable_todo_list", [])
-            if todos:
+            # ★★★ ToDoリストの抽出キーを修正 ★★★
+            todos_data = result.get("strategic_analysis", {}).get("proposals", [])
+            todos_list = [{"最初の一歩": prop.get("first_actionable_step", "N/A"), "戦略名": prop.get("strategy_name", "N/A")} for prop in todos_data]
+            
+            if todos_list:
                 try:
-                    df = pd.DataFrame(todos)
-                    st.dataframe(df)
+                    df = pd.DataFrame(todos_list)
+                    st.dataframe(df, use_container_width=True)
                 except:
                     st.warning("ToDoリストの表示に失敗しました。")
-                    st.json(todos)
+                    st.json(todos_list)
             else:
                 st.info("この会議から、具体的なToDoは、抽出されませんでした。")

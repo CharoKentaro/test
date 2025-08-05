@@ -1,5 +1,5 @@
 # ===============================================================
-# ★★★ app.py ＜完全統合・最終完成版＞ ★★★
+# ★★★ app.py ＜最終完成版・クリアボタン復活＞ ★★★
 # ===============================================================
 import streamlit as st
 import google.generativeai as genai
@@ -74,15 +74,36 @@ with st.sidebar:
     st.divider()
     
     # APIキー管理
-    if 'gemini_api_key' not in st.session_state.app_state:
-        st.session_state.app_state['gemini_api_key'] = ''
-    with st.expander("⚙️ APIキーの設定", expanded=(not st.session_state.app_state['gemini_api_key'])):
+    app_s_sidebar = st.session_state.app_state
+    if 'gemini_api_key' not in app_s_sidebar:
+        app_s_sidebar['gemini_api_key'] = ''
+        
+    with st.expander("⚙️ APIキーの設定", expanded=(not app_s_sidebar.get('gemini_api_key', ''))):
+        # ★★★ ここがクリアボタンを含む修正箇所です ★★★
         with st.form("api_key_form"):
-            api_key_input = st.text_input("Gemini APIキー", type="password", value=st.session_state.app_state['gemini_api_key'])
-            if st.form_submit_button("💾 保存", use_container_width=True):
-                st.session_state.app_state['gemini_api_key'] = api_key_input
-                write_app_state(st.session_state.app_state)
-                st.success("キーを保存しました！"); time.sleep(1); st.rerun()
+            api_key_input = st.text_input(
+                "Gemini APIキー", 
+                type="password", 
+                value=app_s_sidebar.get('gemini_api_key', '')
+            )
+            
+            # 保存ボタンとクリアボタンを2列で表示
+            col1, col2 = st.columns(2)
+            with col1:
+                save_button = st.form_submit_button("💾 保存", use_container_width=True)
+            with col2:
+                reset_button = st.form_submit_button("🔄 クリア", use_container_width=True)
+
+    # フォームのボタンが押された後の処理
+    if save_button:
+        app_s_sidebar['gemini_api_key'] = api_key_input
+        write_app_state(app_s_sidebar)
+        st.success("キーを保存しました！"); time.sleep(1); st.rerun()
+    
+    if reset_button:
+        app_s_sidebar['gemini_api_key'] = ''
+        write_app_state(app_s_sidebar)
+        st.success("キーをクリアしました。"); time.sleep(1); st.rerun()
     
     st.divider()
     tool_selection = st.radio(
@@ -106,72 +127,58 @@ if tool_selection == "💰 お小遣い管理":
     key_total_spent = f"{okozukai_prefix}total_spent"
     key_all_receipts = f"{okozukai_prefix}all_receipts"
     
-    # セッションステート内にデータがなければ初期化
-    app_s = st.session_state.app_state
-    if key_allowance not in app_s: app_s[key_allowance] = 0.0
-    if key_total_spent not in app_s: app_s[key_total_spent] = 0.0
-    if key_all_receipts not in app_s: app_s[key_all_receipts] = []
+    app_s_main = st.session_state.app_state
+    if key_allowance not in app_s_main: app_s_main[key_allowance] = 0.0
+    if key_total_spent not in app_s_main: app_s_main[key_total_spent] = 0.0
+    if key_all_receipts not in app_s_main: app_s_main[key_all_receipts] = []
     
-    # 一時的な状態（確認プレビューなど）はst.session_stateで管理
     if 'receipt_preview' not in st.session_state:
         st.session_state.receipt_preview = None
 
     # --- UIロジック ---
     if st.session_state.receipt_preview:
-        # --- 確認モード ---
         st.subheader("📝 支出の確認")
         st.info("AIが読み取った内容を確認・修正し、問題なければ「確定」してください。")
-
         preview_data = st.session_state.receipt_preview
         corrected_amount = st.number_input("合計金額", value=float(preview_data.get('total_amount', 0.0)), min_value=0.0, step=1.0)
-        
         items_data = preview_data.get('items', [])
-        if items_data:
-            df_items = pd.DataFrame(items_data)
-        else:
-            df_items = pd.DataFrame([{"name": "", "price": 0}])
-        
+        df_items = pd.DataFrame(items_data) if items_data else pd.DataFrame([{"name": "", "price": 0}])
         edited_df = st.data_editor(df_items, num_rows="dynamic", column_config={"name": st.column_config.TextColumn("品物名", required=True), "price": st.column_config.NumberColumn("金額", format="%d")}, use_container_width=True)
         
-        if st.button("💰 この金額で支出を確定する", type="primary", use_container_width=True):
-            app_s[key_total_spent] += corrected_amount
-            app_s[key_all_receipts].append({
+        col_confirm, col_cancel = st.columns(2)
+        if col_confirm.button("💰 この金額で支出を確定する", type="primary", use_container_width=True):
+            app_s_main[key_total_spent] += corrected_amount
+            app_s_main[key_all_receipts].append({
                 "date": datetime.now().strftime('%Y-%m-%d %H:%M'),
                 "total_amount": corrected_amount,
                 "items": edited_df.to_dict('records')
             })
-            write_app_state(app_s)
+            write_app_state(app_s_main)
             st.session_state.receipt_preview = None
             st.success("支出を記録しました！"); st.balloons(); time.sleep(1); st.rerun()
-
-        if st.button("❌ キャンセル", use_container_width=True):
-            st.session_state.receipt_preview = None
-            st.rerun()
-
+        if col_cancel.button("❌ キャンセル", use_container_width=True):
+            st.session_state.receipt_preview = None; st.rerun()
     else:
-        # --- 通常モード ---
-        with st.expander("💳 今月のお小遣い設定", expanded=(app_s[key_allowance] == 0)):
+        with st.expander("💳 今月のお小遣い設定", expanded=(app_s_main[key_allowance] == 0)):
             with st.form(key="allowance_form"):
-                new_allowance = st.number_input("今月のお小遣い", value=float(app_s[key_allowance]), step=1000.0)
-                if st.form_submit_button("この金額で設定する", type="primary"):
-                    app_s[key_allowance] = new_allowance
-                    write_app_state(app_s)
+                new_allowance = st.number_input("今月のお小遣い", value=float(app_s_main[key_allowance]), step=1000.0)
+                if st.form_submit_button("この金額で設定する", type="primary", use_container_width=True):
+                    app_s_main[key_allowance] = new_allowance
+                    write_app_state(app_s_main)
                     st.success(f"お小遣いを {new_allowance:,.0f} 円に設定しました！"); time.sleep(1); st.rerun()
         
         st.divider()
         st.subheader("📊 現在の状況")
-        current_allowance = app_s[key_allowance]
-        current_spent = app_s[key_total_spent]
+        current_allowance = app_s_main[key_allowance]
+        current_spent = app_s_main[key_total_spent]
         remaining_balance = calculate_remaining_balance(current_allowance, current_spent)
         
         col1, col2, col3 = st.columns(3)
         col1.metric("今月の予算", f"{current_allowance:,.0f} 円")
         col2.metric("使った金額", f"{current_spent:,.0f} 円")
         col3.metric("残り予算", f"{remaining_balance:,.0f} 円")
-
         st.markdown(f"<p style='text-align: center; font-size: 2.5em; font-weight: bold;'>{format_balance_display(remaining_balance)}</p>", unsafe_allow_html=True)
-        if current_allowance > 0:
-            st.progress(min(current_spent / current_allowance, 1.0))
+        if current_allowance > 0: st.progress(min(current_spent / current_allowance, 1.0))
 
         st.divider()
         st.subheader("📸 レシートを登録する")
@@ -187,14 +194,13 @@ if tool_selection == "💰 お小遣い管理":
                             image = Image.open(uploaded_file)
                             response = model.generate_content([OKOZUKAI_PROMPT, image])
                             extracted_data = json.loads(response.text.strip().replace("```json", "").replace("```", ""))
-                        st.session_state.receipt_preview = extracted_data
-                        st.rerun()
+                        st.session_state.receipt_preview = extracted_data; st.rerun()
                     except Exception as e: st.error(f"❌ 解析エラー: {e}")
         
         st.divider()
         st.subheader("📜 支出履歴")
-        if app_s[key_all_receipts]:
-            for receipt in reversed(app_s[key_all_receipts]):
+        if app_s_main[key_all_receipts]:
+            for receipt in reversed(app_s_main[key_all_receipts]):
                 with st.expander(f"**{receipt['date']}** - **{float(receipt['total_amount']):,.0f} 円**"):
                     st.dataframe(pd.DataFrame(receipt['items']), hide_index=True, use_container_width=True)
 

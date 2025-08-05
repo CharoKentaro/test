@@ -7,9 +7,9 @@ import time
 import json
 from streamlit_mic_recorder import mic_recorder
 from google.api_core import exceptions
-from datetime import datetime, timezone, timedelta # JSTの定義に必要なため追加
+from datetime import datetime, timezone, timedelta
 
-# --- 補助関数 (ちゃろさんの高機能版) ---
+# --- 補助関数 (ちゃろさんの高機能版・デバッグ機能付き) ---
 def translate_with_gemini(content_to_process, api_key):
     try:
         genai.configure(api_key=api_key)
@@ -21,6 +21,12 @@ def translate_with_gemini(content_to_process, api_key):
                 transcription_prompt = "この日本語の音声を、できる限り正確に、文字に書き起こしてください。書き起こした日本語テキストのみを回答してください。"
                 transcription_response = model.generate_content([transcription_prompt, audio_part])
                 processed_text = transcription_response.text.strip()
+            
+            # ▼▼▼【デバッグコード①】ここから追加しました ▼▼▼
+            st.info("【デバッグ情報】AIが聞き取ったあなたの言葉↓")
+            st.write(f"`{processed_text}`")
+            # ▲▲▲ ここまで ▲▲▲
+
             if not processed_text:
                 st.error("あなたの声を、言葉に、変えることができませんでした。")
                 return None, None
@@ -62,6 +68,11 @@ def translate_with_gemini(content_to_process, api_key):
             response = model.generate_content(request_contents)
             raw_response_text = response.text
         
+        # ▼▼▼【デバッグコード②】ここから追加しました ▼▼▼
+        st.info("【デバッグ情報】翻訳AIからの生の応答データ↓")
+        st.code(raw_response_text)
+        # ▲▲▲ ここまで ▲▲▲
+
         json_start_index = raw_response_text.find('{')
         json_end_index = raw_response_text.rfind('}')
         if json_start_index != -1 and json_end_index != -1:
@@ -75,7 +86,6 @@ def translate_with_gemini(content_to_process, api_key):
         else:
             st.error("AIから予期せぬ形式の応答がありました。")
             return None, None
-    # ▼▼▼【修正点1】このexceptブロックをtryブロックと同じ階層にインデントしました ▼▼▼
     except exceptions.ResourceExhausted:
         st.error("APIキーの上限に達したようです。")
         return None, None
@@ -100,7 +110,6 @@ def show_tool(gemini_api_key):
     usage_limit = 1
     is_limit_reached = st.session_state.get(f"{prefix}usage_count", 0) >= usage_limit
     
-    # ▼▼▼【修正点2】ここから下のUIロジック全体を show_tool 関数内に収まるようにインデントしました ▼▼▼
     # --- UIロジックの分岐 ---
     if is_limit_reached:
         # ★★★ ここが、新しくなった「合言葉システム」です ★★★
@@ -178,8 +187,8 @@ def show_tool(gemini_api_key):
                                 translation = candidate.get('translation', '翻訳エラー')
                                 st.info(f"**{nuance}**")
                                 st.success(translation)
-            
-            if st.button("翻訳履歴をクリア", key=f"{prefix}clear_history"):
-                st.session_state[f"{prefix}results"] = []
-                st.session_state[f"{prefix}last_input"] = ""
-                st.rerun()
+        
+        if st.button("翻訳履歴をクリア", key=f"{prefix}clear_history"):
+            st.session_state[f"{prefix}results"] = []
+            st.session_state[f"{prefix}last_input"] = ""
+            st.rerun()

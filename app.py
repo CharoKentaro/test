@@ -1,8 +1,8 @@
 # ===============================================================
-# ★★★ app.py ＜最終完成版＞ ★★★
+# ★★★ app.py ＜99.99%版＞ ★★★
 # ===============================================================
 import streamlit as st
-from streamlit_local_storage import LocalStorage # ★ 復活させ、正しく使う
+from streamlit_local_storage import LocalStorage
 import time
 from tools import translator_tool, okozukai_recorder_tool, calendar_tool, gijiroku_tool, kensha_no_kioku_tool, ai_memory_partner_tool
 
@@ -18,8 +18,10 @@ with st.sidebar:
     )
     st.divider()
     
-    # ★★★ LocalStorageを、APIキーのためだけに、正しく使う ★★★
+    # アプリケーション全体で唯一のLocalStorageインスタンスを生成
     localS = LocalStorage()
+    
+    # APIキーの保存ロジック（ここは変更なし）
     saved_key = localS.getItem("gemini_api_key")
     gemini_default = saved_key if isinstance(saved_key, str) else ""
     if 'gemini_api_key' not in st.session_state:
@@ -34,7 +36,6 @@ with st.sidebar:
 
     if save_button:
         st.session_state.gemini_api_key = api_key_input
-        # ★ setItemに、必ず、一意のkeyを指定する
         localS.setItem("gemini_api_key", st.session_state.gemini_api_key, key="api_key_storage")
         st.success("キーをブラウザに保存しました！"); time.sleep(1); st.rerun()
     if reset_button:
@@ -46,17 +47,20 @@ with st.sidebar:
     st.markdown("""<div style="font-size: 0.9em;"><a href="https://aistudio.google.com/app/apikey" target="_blank">Gemini APIキーの取得はこちら</a></div>""", unsafe_allow_html=True)
 
 
+# 各ツールの呼び出し
 if st.session_state.tool_selection == "🤝 翻訳ツール":
     translator_tool.show_tool(gemini_api_key=st.session_state.get('gemini_api_key', ''))
 elif st.session_state.tool_selection == "💰 お小遣い管理":
-    # ★★★ お小遣いツールには、LocalStorageを渡さない ★★★
-    okozukai_recorder_tool.show_tool(gemini_api_key=st.session_state.get('gemini_api_key', ''))
-# ... (他のツールの呼び出しも、同様に、localSを渡さない) ...
+    # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+    # ★★★ ここが唯一の修正点です ★★★
+    # ★★★ お小遣いツールに、localSインスタンスを渡します ★★★
+    # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+    okozukai_recorder_tool.show_tool(gemini_api_key=st.session_state.get('gemini_api_key', ''), localS=localS)
 elif st.session_state.tool_selection == "📅 カレンダー登録":
-    calendar_tool.show_tool(gemini_api_key=st.session_state.get('gemini_api_key', ''))
+    calendar_tool.show_tool(gemini_api_key=st.session_state.get('gemini_api_key', ''), localS=localS) # 他のツールも同様に渡すとより堅牢
 elif st.session_state.tool_selection == "📝 議事録作成":
-    gijiroku_tool.show_tool(gemini_api_key=st.session_state.get('gemini_api_key', ''))
+    gijiroku_tool.show_tool(gemini_api_key=st.session_state.get('gemini_api_key', ''), localS=localS)
 elif st.session_state.tool_selection == "🧠 賢者の記憶":
-    kensha_no_kioku_tool.show_tool(gemini_api_key=st.session_state.get('gemini_api_key', ''))
+    kensha_no_kioku_tool.show_tool(gemini_api_key=st.session_state.get('gemini_api_key', ''), localS=localS)
 elif st.session_state.tool_selection == "❤️ 認知予防ツール":
-    ai_memory_partner_tool.show_tool(gemini_api_key=st.session_state.get('gemini_api_key', ''))
+    ai_memory_partner_tool.show_tool(gemini_api_key=st.session_state.get('gemini_api_key', ''), localS=localS)

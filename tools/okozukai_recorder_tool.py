@@ -1,5 +1,5 @@
 # ===============================================================
-# ★★★ okozukai_recorder_tool.py ＜最終解決版＞ ★★★
+# ★★★ okozukai_recorder_tool.py ＜アーキテクチャ刷新・最終版＞ ★★★
 # ===============================================================
 import streamlit as st
 import google.generativeai as genai
@@ -46,7 +46,10 @@ def show_tool(gemini_api_key, localS: LocalStorage):
     key_total_spent = f"{prefix}total_spent"
     key_all_receipts = f"{prefix}all_receipt_data"
 
+    # --- Step 1: 初期化 ---
+    # 初回実行時のみ、LocalStorageから値を読み込んでst.session_stateを初期化する
     if f"{prefix}initialized" not in st.session_state:
+        # 常にfloatとして扱うことで、データ型の不整合を防ぐ
         st.session_state[key_allowance] = float(localS.getItem(key_allowance) or 0.0)
         st.session_state[key_total_spent] = float(localS.getItem(key_total_spent) or 0.0)
         st.session_state[key_all_receipts] = localS.getItem(key_all_receipts) or []
@@ -54,11 +57,25 @@ def show_tool(gemini_api_key, localS: LocalStorage):
         st.session_state[f"{prefix}usage_count"] = 0
         st.session_state[f"{prefix}initialized"] = True
 
+    # --- 新アーキテクチャの核心部 ---
+    # --- Step 2: 状態の同期 ---
+    # 「st.session_state（正義）」と「LocalStorage（バックアップ）」を比較し、
+    # 値が異なっていれば、「正義」の値を「バックアップ」に反映（＝保存）する
+    try:
+        session_val = float(st.session_state.get(key_allowance, 0.0))
+        storage_val = float(localS.getItem(key_allowance) or 0.0)
+
+        if session_val != storage_val:
+            localS.setItem(key_allowance, session_val, key="okozukai_allowance_storage_sync")
+            st.toast(f"✅ 設定をブラウザに保存しました！", icon="💾")
+    except (ValueError, TypeError):
+        pass
+
     usage_limit = 1
     is_limit_reached = st.session_state.get(f"{prefix}usage_count", 0) >= usage_limit
 
     if is_limit_reached:
-        # (アンロック・モードは変更なし)
+        # アンロック・モード
         st.success("🎉 たくさんのご利用、ありがとうございます！")
         st.info("このツールが、あなたの家計管理の一助となれば幸いです。")
         st.warning("レシートの読み込みを続けるには、応援ページで「今日の合言葉（4桁の数字）」を確認し、入力してください。")
@@ -82,7 +99,7 @@ def show_tool(gemini_api_key, localS: LocalStorage):
                 st.error("合言葉が違うようです。応援ページで、もう一度ご確認ください。")
 
     elif st.session_state[f"{prefix}receipt_preview"]:
-        # (確認モードは変更なし)
+        # 確認モード
         st.subheader("📝 支出の確認")
         st.info("AIが読み取った内容を確認・修正し、問題なければ「確定」してください。")
         preview_data = st.session_state[f"{prefix}receipt_preview"]
@@ -123,37 +140,27 @@ def show_tool(gemini_api_key, localS: LocalStorage):
             st.rerun()
 
     else:
-        # 通常モード
+        # --- Step 3: UIの描画と操作 ---
+        # UIは常に「正義」である st.session_state を参照して描画される
         st.info("レシートを登録して、今月使えるお金を管理しよう！")
         st.caption(f"🚀 あと {usage_limit - st.session_state.get(f'{prefix}usage_count', 0)} 回、レシートを読み込めます。")
 
         with st.expander("💳 今月のお小遣い設定", expanded=(st.session_state[key_allowance] == 0)):
             st.warning("⚠️ **ご注意**: ブラウザの「プライベートモード」や「シークレットモード」では、設定した金額が保存されません。通常のモードでご利用ください。")
             
-            with st.form(key=f"{prefix}allowance_form"):
-                new_allowance = st.number_input(
-                    "今月のお小遣いを入力してください", 
-                    value=st.session_state[key_allowance], 
-                    step=1000.0, 
-                    min_value=0.0
-                )
-                
-                submitted = st.form_submit_button("この金額で設定する", use_container_width=True, type="primary")
-                
-                # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-                # ★★★ ここが、真犯人を排除した、最終解決策です ★★★
-                # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-                if submitted:
-                    st.session_state[key_allowance] = new_allowance
-                    localS.setItem(key_allowance, new_allowance, key="okozukai_allowance_storage")
-                    
-                    # 画面を邪魔しない st.toast で、完了をシンプルに通知する
-                    st.toast(f"✅ お小遣いを {new_allowance:,.0f} 円に設定しました！")
-                    
-                    # time.sleep と st.rerun() を削除。
-                    # これが悪夢のレースコンディションを引き起こしていた。
-                    # フォーム送信後は、何もしなくてもStreamlitが自動で画面を更新してくれる。
-        
+            def update_session_state():
+                input_val = st.session_state[f"{prefix}allowance_input_key"]
+                st.session_state[key_allowance] = float(input_val)
+
+            st.number_input(
+                "今月のお小遣いを入力してください", 
+                value=float(st.session_state[key_allowance]), 
+                step=1000.0, 
+                min_value=0.0,
+                key=f"{prefix}allowance_input_key",
+                on_change=update_session_state
+            )
+            
         st.divider()
         st.subheader("📊 現在の状況")
         current_allowance = st.session_state[key_allowance]

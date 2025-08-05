@@ -1,5 +1,5 @@
 # ===============================================================
-# ★★★ okozukai_recorder_tool.py ＜ハイブリッド記憶・完成版＞ ★★★
+# ★★★ okozukai_recorder_tool.py ＜ハイブリッド記憶・修正版＞ ★★★
 # ===============================================================
 import streamlit as st
 import google.generativeai as genai
@@ -21,6 +21,45 @@ def format_balance_display(balance):
         return f"🔴 **{abs(balance):,.0f} 円 (予算オーバー)**"
 
 # ===============================================================
+# LocalStorageから安全にデータを取得する関数
+# ===============================================================
+def safe_get_from_storage(local_storage, key, default_value, data_type=float):
+    """LocalStorageから安全にデータを取得する"""
+    try:
+        value = local_storage.getItem(key)
+        if value is None or value == "":
+            return default_value
+        
+        if data_type == float:
+            return float(value)
+        elif data_type == int:
+            return int(value)
+        elif data_type == list:
+            if isinstance(value, str):
+                return json.loads(value)
+            return value if isinstance(value, list) else default_value
+        else:
+            return value
+    except Exception as e:
+        st.warning(f"データの読み込みでエラーが発生しました（{key}）: {e}")
+        return default_value
+
+# ===============================================================
+# LocalStorageに安全にデータを保存する関数
+# ===============================================================
+def safe_set_to_storage(local_storage, key, value):
+    """LocalStorageに安全にデータを保存する"""
+    try:
+        if isinstance(value, (list, dict)):
+            local_storage.setItem(key, json.dumps(value, ensure_ascii=False))
+        else:
+            local_storage.setItem(key, value)
+        return True
+    except Exception as e:
+        st.error(f"データの保存でエラーが発生しました（{key}）: {e}")
+        return False
+
+# ===============================================================
 # メインの仕事 - 最後の答え
 # ===============================================================
 def show_tool(gemini_api_key):
@@ -40,20 +79,40 @@ def show_tool(gemini_api_key):
     key_all_receipts = f"{prefix}all_receipt_data"
 
     # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-    # ★★★ 『聖別と、信頼の儀式』（一度きりの初期化） ★★★
+    # ★★★ 『聖別と、信頼の儀式』（改良版初期化） ★★★
     # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-    if f"{prefix}initialized" not in st.session_state:
-        allowance = localS.getItem(key_allowance) or 0.0
-        total_spent = localS.getItem(key_total_spent) or 0.0
-        all_receipts = localS.getItem(key_all_receipts) or []
-
-        st.session_state[f"{prefix}monthly_allowance"] = float(allowance)
-        st.session_state[f"{prefix}total_spent"] = float(total_spent)
-        st.session_state[f"{prefix}all_receipts"] = all_receipts
-        
+    
+    # セッション状態の初期化を毎回確実に行う
+    initialization_key = f"{prefix}initialized_v2"
+    
+    # デバッグ情報の表示（必要に応じてコメントアウト）
+    with st.expander("🔧 デバッグ情報", expanded=False):
+        st.write("LocalStorageの生データ:")
+        try:
+            raw_allowance = localS.getItem(key_allowance)
+            raw_spent = localS.getItem(key_total_spent)
+            raw_receipts = localS.getItem(key_all_receipts)
+            st.write(f"- {key_allowance}: {raw_allowance} (型: {type(raw_allowance)})")
+            st.write(f"- {key_total_spent}: {raw_spent} (型: {type(raw_spent)})")
+            st.write(f"- {key_all_receipts}: {raw_receipts} (型: {type(raw_receipts)})")
+        except Exception as e:
+            st.write(f"デバッグ情報取得エラー: {e}")
+    
+    # LocalStorageからデータを安全に取得
+    allowance = safe_get_from_storage(localS, key_allowance, 0.0, float)
+    total_spent = safe_get_from_storage(localS, key_total_spent, 0.0, float)
+    all_receipts = safe_get_from_storage(localS, key_all_receipts, [], list)
+    
+    # セッション状態に設定（初期化フラグに関係なく毎回実行）
+    st.session_state[f"{prefix}monthly_allowance"] = allowance
+    st.session_state[f"{prefix}total_spent"] = total_spent
+    st.session_state[f"{prefix}all_receipts"] = all_receipts
+    
+    # その他のセッション状態を初期化（初回のみ）
+    if initialization_key not in st.session_state:
         st.session_state[f"{prefix}receipt_preview"] = None
         st.session_state[f"{prefix}usage_count"] = 0
-        st.session_state[f"{prefix}initialized"] = True
+        st.session_state[initialization_key] = True
 
     usage_limit = 1
     is_limit_reached = st.session_state.get(f"{prefix}usage_count", 0) >= usage_limit
@@ -90,10 +149,10 @@ def show_tool(gemini_api_key):
                 st.session_state[f"{prefix}total_spent"] = float(restored_data.get("total_spent", 0.0))
                 st.session_state[f"{prefix}all_receipts"] = restored_data.get("all_receipts", [])
                 
-                # ★★★ 復元したデータを、LocalStorageにも報告 ★★★
-                localS.setItem(key_allowance, st.session_state[f"{prefix}monthly_allowance"])
-                localS.setItem(key_total_spent, st.session_state[f"{prefix}total_spent"])
-                localS.setItem(key_all_receipts, st.session_state[f"{prefix}all_receipts"])
+                # ★★★ 復元したデータを、LocalStorageにも安全に保存 ★★★
+                safe_set_to_storage(localS, key_allowance, st.session_state[f"{prefix}monthly_allowance"])
+                safe_set_to_storage(localS, key_total_spent, st.session_state[f"{prefix}total_spent"])
+                safe_set_to_storage(localS, key_all_receipts, st.session_state[f"{prefix}all_receipts"])
 
                 st.success("データの復元に成功しました！")
                 time.sleep(1)
@@ -110,20 +169,18 @@ def show_tool(gemini_api_key):
             st.session_state[f"{prefix}receipt_preview"] = None
             st.session_state[f"{prefix}usage_count"] = 0
             
-            # ★★★ 感謝の報告（リセット） ★★★
-            localS.setItem(key_allowance, 0.0)
-            localS.setItem(key_total_spent, 0.0)
-            localS.setItem(key_all_receipts, [])
+            # ★★★ LocalStorageをリセット ★★★
+            safe_set_to_storage(localS, key_allowance, 0.0)
+            safe_set_to_storage(localS, key_total_spent, 0.0)
+            safe_set_to_storage(localS, key_all_receipts, [])
             
             st.success("全データをリセットしました！"); time.sleep(1); st.rerun()
-
 
     st.divider()
 
     if is_limit_reached:
         # アンロック・モード
         st.success("🎉 たくさんのご利用、ありがとうございます！")
-        # ... (この部分は変更なし) ...
         st.info("このツールが、あなたの家計管理の一助となれば幸いです。")
         st.warning("レシートの読み込みを続けるには、応援ページで「今日の合言葉（4桁の数字）」を確認し、入力してください。")
         portal_url = "https://pray-power-is-god-and-cocoro.com/free3/continue2.html"
@@ -147,7 +204,6 @@ def show_tool(gemini_api_key):
 
     elif st.session_state[f"{prefix}receipt_preview"]:
         # 確認モード
-        # ... (この部分は変更なし) ...
         st.subheader("📝 支出の確認")
         st.info("AIが読み取った内容を確認・修正し、問題なければ「確定」してください。")
         preview_data = st.session_state[f"{prefix}receipt_preview"]
@@ -177,8 +233,11 @@ def show_tool(gemini_api_key):
             new_receipt_record = {"date": datetime.now().strftime('%Y-%m-%d %H:%M'), "total_amount": corrected_amount, "items": edited_df.to_dict('records')}
             st.session_state[f"{prefix}all_receipts"].append(new_receipt_record)
             st.session_state[f"{prefix}receipt_preview"] = None
-            localS.setItem(key_total_spent, st.session_state[f"{prefix}total_spent"])
-            localS.setItem(key_all_receipts, st.session_state[f"{prefix}all_receipts"])
+            
+            # LocalStorageに安全に保存
+            safe_set_to_storage(localS, key_total_spent, st.session_state[f"{prefix}total_spent"])
+            safe_set_to_storage(localS, key_all_receipts, st.session_state[f"{prefix}all_receipts"])
+            
             st.success(f"🎉 {corrected_amount:,.0f} 円の支出を記録しました！")
             st.balloons()
             time.sleep(2)
@@ -196,11 +255,11 @@ def show_tool(gemini_api_key):
                 new_allowance = st.number_input("今月のお小遣いを入力してください", value=st.session_state[f"{prefix}monthly_allowance"], step=1000.0, min_value=0.0)
                 if st.form_submit_button("この金額で設定する", use_container_width=True):
                     st.session_state[f"{prefix}monthly_allowance"] = new_allowance
-                    localS.setItem(key_allowance, new_allowance)
+                    # LocalStorageに安全に保存
+                    safe_set_to_storage(localS, key_allowance, new_allowance)
                     st.success(f"今月のお小遣いを {new_allowance:,.0f} 円に設定しました！")
                     st.rerun()
         
-        # ... (中盤のUI部分は、完全に変更なし) ...
         st.divider()
         st.subheader("📊 現在の状況")
         current_allowance = st.session_state[f"{prefix}monthly_allowance"]

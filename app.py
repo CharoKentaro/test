@@ -2,7 +2,7 @@
 # ★★★ app.py ＜最終完成版＞ ★★★
 # ===============================================================
 import streamlit as st
-from streamlit_local_storage import LocalStorage # ★ 復活させる
+from streamlit_local_storage import LocalStorage # ★ 復活させ、正しく使う
 import time
 from tools import translator_tool, okozukai_recorder_tool, calendar_tool, gijiroku_tool, kensha_no_kioku_tool, ai_memory_partner_tool
 
@@ -34,10 +34,11 @@ with st.sidebar:
 
     if save_button:
         st.session_state.gemini_api_key = api_key_input
-        localS.setItem("gemini_api_key", st.session_state.gemini_api_key)
+        # ★ setItemに、必ず、一意のkeyを指定する
+        localS.setItem("gemini_api_key", st.session_state.gemini_api_key, key="api_key_storage")
         st.success("キーをブラウザに保存しました！"); time.sleep(1); st.rerun()
     if reset_button:
-        localS.setItem("gemini_api_key", None)
+        localS.setItem("gemini_api_key", None, key="api_key_storage_clear")
         st.session_state.gemini_api_key = ""
         st.success("キーをクリアしました。"); time.sleep(1); st.rerun()
 
@@ -48,8 +49,9 @@ with st.sidebar:
 if st.session_state.tool_selection == "🤝 翻訳ツール":
     translator_tool.show_tool(gemini_api_key=st.session_state.get('gemini_api_key', ''))
 elif st.session_state.tool_selection == "💰 お小遣い管理":
-    # ★★★ お小遣いツールには、もう、LocalStorageを渡さない ★★★
+    # ★★★ お小遣いツールには、LocalStorageを渡さない ★★★
     okozukai_recorder_tool.show_tool(gemini_api_key=st.session_state.get('gemini_api_key', ''))
+# ... (他のツールの呼び出しも、同様に、localSを渡さない) ...
 elif st.session_state.tool_selection == "📅 カレンダー登録":
     calendar_tool.show_tool(gemini_api_key=st.session_state.get('gemini_api_key', ''))
 elif st.session_state.tool_selection == "📝 議事録作成":

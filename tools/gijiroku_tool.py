@@ -20,7 +20,7 @@ def show_tool(gemini_api_key):
         st.session_state[f"{prefix}usage_count"] = 0
 
     # ★★★ リミット回数を、ここで定義 ★★★
-    usage_limit = 5 # ←←← ちゃろさんが、いつでも、ここの数字を変えられます！
+    usage_limit = 1 # ←←← ちゃろさんが、いつでも、ここの数字を変えられます！
 
     # --- 運命の分岐 ---
     is_limit_reached = st.session_state.get(f"{prefix}usage_count", 0) >= usage_limit

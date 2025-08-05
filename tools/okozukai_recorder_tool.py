@@ -1,9 +1,9 @@
 # ===============================================================
-# ★★★ okozukai_recorder_tool.py ＜99.99%版・完全版＞ ★★★
+# ★★★ okozukai_recorder_tool.py ＜デバッグモード版・完全版＞ ★★★
 # ===============================================================
 import streamlit as st
 import google.generativeai as genai
-from streamlit_local_storage import LocalStorage
+from streamlit_local_storage import LocalStorage 
 import json
 from PIL import Image
 import pandas as pd
@@ -46,14 +46,27 @@ def show_tool(gemini_api_key, localS: LocalStorage):
     key_total_spent = f"{prefix}total_spent"
     key_all_receipts = f"{prefix}all_receipt_data"
 
-    # 初期化ロジック
+    # --- デバッグ用コードここから ---
+    st.info("【デバッグ】'okozukai_recorder_tool.py' の show_tool が実行されました。")
+    # --- デバッグ用コードここまで ---
+
     if f"{prefix}initialized" not in st.session_state:
-        st.session_state[key_allowance] = float(localS.getItem(key_allowance) or 0.0)
+        # --- デバッグ用コードここから ---
+        st.info("【デバッグ】初回初期化ブロックを実行します。")
+        raw_allowance = localS.getItem(key_allowance)
+        st.write(f"【デバッグ】LocalStorageから'{key_allowance}'を読み込み試行。取得値: `{raw_allowance}` (型: `{type(raw_allowance)}`)")
+        # --- デバッグ用コードここまで ---
+
+        st.session_state[key_allowance] = float(raw_allowance or 0.0)
         st.session_state[key_total_spent] = float(localS.getItem(key_total_spent) or 0.0)
         st.session_state[key_all_receipts] = localS.getItem(key_all_receipts) or []
         st.session_state[f"{prefix}receipt_preview"] = None
         st.session_state[f"{prefix}usage_count"] = 0
         st.session_state[f"{prefix}initialized"] = True
+        
+        # --- デバッグ用コードここから ---
+        st.write(f"【デバッグ】初期化後の st.session_state['{key_allowance}']: `{st.session_state[key_allowance]}`")
+        # --- デバッグ用コードここまで ---
 
     usage_limit = 1
     is_limit_reached = st.session_state.get(f"{prefix}usage_count", 0) >= usage_limit
@@ -112,11 +125,8 @@ def show_tool(gemini_api_key, localS: LocalStorage):
             st.session_state[key_total_spent] += corrected_amount
             new_receipt_record = {"date": datetime.now().strftime('%Y-%m-%d %H:%M'), "total_amount": corrected_amount, "items": edited_df.to_dict('records')}
             st.session_state[key_all_receipts].append(new_receipt_record)
-            
-            # 保存処理の堅牢化
             localS.setItem(key_total_spent, st.session_state[key_total_spent], key="okozukai_total_spent_storage")
             localS.setItem(key_all_receipts, st.session_state[key_all_receipts], key="okozukai_receipts_storage")
-            
             st.session_state[f"{prefix}receipt_preview"] = None
             st.success(f"🎉 {corrected_amount:,.0f} 円の支出を記録しました！")
             st.balloons()
@@ -131,25 +141,44 @@ def show_tool(gemini_api_key, localS: LocalStorage):
         st.info("レシートを登録して、今月使えるお金を管理しよう！")
         st.caption(f"🚀 あと {usage_limit - st.session_state.get(f'{prefix}usage_count', 0)} 回、レシートを読み込めます。")
 
-        # ★★★ ここが「99.99%」の信頼性を実現するための核心部です ★★★
         with st.expander("💳 今月のお小遣い設定", expanded=(st.session_state[key_allowance] == 0)):
-            
             st.warning("⚠️ **ご注意**: ブラウザの「プライベートモード」や「シークレットモード」では、設定した金額が保存されません。通常のモードでご利用ください。")
+            
+            # --- デバッグ用コードここから ---
+            st.info(f"【デバッグ】フォーム描画前の st.session_state['{key_allowance}']: `{st.session_state.get(key_allowance)}`")
+            # --- デバッグ用コードここまで ---
 
             with st.form(key=f"{prefix}allowance_form"):
                 new_allowance = st.number_input(
                     "今月のお小遣いを入力してください", 
                     value=st.session_state[key_allowance], 
                     step=1000.0, 
-                    min_value=0.0
+                    min_value=0.0,
+                    key=f"{prefix}allowance_input"
                 )
-                
                 submitted = st.form_submit_button("この金額で設定する", use_container_width=True, type="primary")
                 
                 if submitted:
+                    # --- デバッグ用コードここから ---
+                    st.success("【デバッグ】「この金額で設定する」ボタンが押されました！")
+                    st.write(f"【デバッグ】フォームから入力された値 (new_allowance): `{new_allowance}` (型: `{type(new_allowance)}`)")
+                    # --- デバッグ用コードここまで ---
+
                     st.session_state[key_allowance] = new_allowance
+                    
+                    # --- デバッグ用コードここから ---
+                    st.write(f"【デバッグ】st.session_state['{key_allowance}'] を `{new_allowance}` に更新しました。")
+                    st.info(f"【デバッグ】これから localS.setItem('{key_allowance}', {new_allowance}) を呼び出します...")
+                    # --- デバッグ用コードここまで ---
+
                     localS.setItem(key_allowance, new_allowance, key="okozukai_allowance_storage")
+                    
                     st.success(f"お小遣いを {new_allowance:,.0f} 円に設定し、ブラウザに保存します…")
+                    
+                    # --- デバッグ用コードここから ---
+                    st.warning("【デバッグ】1.5秒待機後、st.rerun() を実行してページを再描画します。")
+                    # --- デバッグ用コードここまで ---
+
                     time.sleep(1.5)
                     st.rerun()
         
@@ -198,7 +227,6 @@ def show_tool(gemini_api_key, localS: LocalStorage):
         st.subheader("📜 支出履歴")
         if st.session_state[key_all_receipts]:
             display_list = []
-            # 履歴を逆順（新しいものが上）にして表示
             for receipt in reversed(st.session_state[key_all_receipts]):
                 date = receipt.get('date', 'N/A')
                 total = receipt.get('total_amount', 0)

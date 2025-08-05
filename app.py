@@ -1,71 +1,55 @@
 # ===============================================================
-# ★★★ app.py ＜支配者への最終抵抗版＞ ★★★
+# ★★★ app.py ＜最終版・完全版＞ ★★★
 # ===============================================================
 import streamlit as st
-import json
-from pathlib import Path
+from streamlit_local_storage import LocalStorage
+import time
+from tools import translator_tool, okozukai_recorder_tool, calendar_tool, gijiroku_tool, kensha_no_kioku_tool, ai_memory_partner_tool
 
-st.set_page_config(page_title="最終抵抗テスト", page_icon="💾")
-st.title("💾 サーバー直接保存テスト")
+st.set_page_config(page_title="Multi-Tool Portal", page_icon="🚀", layout="wide")
 
-# --- 唯一の記憶装置：サーバー上のファイル ---
-# このファイルは、ブラウザがリロードしても消えない
-STATE_FILE = Path("state.json")
+# LocalStorageは、もはやAPIキーの保存という限定的な役割でのみ使用
+with st.sidebar:
+    st.title("🚀 Multi-Tool Portal")
+    st.divider()
+    tool_selection = st.radio(
+        "利用するツールを選択してください:",
+        ("🤝 翻訳ツール", "💰 お小遣い管理", "📅 カレンダー登録", "📝 議事録作成", "🧠 賢者の記憶", "❤️ 認知予防ツール"),
+        key="tool_selection"
+    )
+    st.divider()
+    
+    localS = LocalStorage()
+    saved_key = localS.getItem("gemini_api_key")
+    gemini_default = saved_key if isinstance(saved_key, str) else ""
+    if 'gemini_api_key' not in st.session_state:
+        st.session_state.gemini_api_key = gemini_default
+        
+    with st.expander("⚙️ APIキーの設定", expanded=not st.session_state.gemini_api_key):
+        with st.form("api_key_form"):
+            api_key_input = st.text_input("Gemini APIキー", type="password", value=st.session_state.gemini_api_key)
+            if st.form_submit_button("💾 保存", use_container_width=True):
+                st.session_state.gemini_api_key = api_key_input
+                localS.setItem("gemini_api_key", api_key_input)
+                st.success("キーを保存しました！"); time.sleep(1); st.rerun()
 
-# --- データの読み書きを行う関数 ---
-
-def read_state():
-    """サーバー上のファイルから数値を読み込む"""
-    if STATE_FILE.exists():
-        with STATE_FILE.open("r") as f:
-            try:
-                data = json.load(f)
-                # "value" キーの値を取得、なければ0.0
-                return float(data.get("value", 0.0))
-            except (json.JSONDecodeError, ValueError):
-                # ファイルが空か壊れている場合は0.0を返す
-                return 0.0
-    else:
-        # ファイルが存在しない初回は0.0を返す
-        return 0.0
-
-def write_state(value):
-    """サーバー上のファイルに数値を書き込む"""
-    with STATE_FILE.open("w") as f:
-        json.dump({"value": float(value)}, f)
-    st.toast("サーバーに値を保存しました！", icon="✅")
+    st.divider()
+    st.markdown("""<div style="font-size: 0.9em;"><a href="https://aistudio.google.com/app/apikey" target="_blank">Gemini APIキーの取得はこちら</a></div>""", unsafe_allow_html=True)
 
 
-# --- アプリのロジック ---
+api_key = st.session_state.get('gemini_api_key', '')
 
-# 1. 起動時に、サーバー上のファイルから現在の値を読み込む
-current_value = read_state()
-
-# 2. UIの表示
-st.info(
-    "このアプリは、ブラウザではなく、サーバーに直接データを保存します。"
-    "これでリロードしても値が消えなければ、私たちはついに真犯人を特定したことになります。"
-)
-st.divider()
-
-# 今回は、ボタンを押した時だけ保存する、最も確実な方法を採用
-input_value = st.number_input(
-    label="ここに数値を入力してください",
-    value=current_value,
-    step=1000.0,
-    key="input_widget"
-)
-
-if st.button("この数値をサーバーに保存する", type="primary"):
-    # ボタンが押されたら、書き込み関数を呼び出す
-    write_state(input_value)
-    # Streamlitに値を再読み込みさせるために、リロードする
-    st.rerun()
-
-st.divider()
-
-# --- 結果の確認 ---
-st.subheader("現在のサーバーに保存されている値")
-st.markdown(f"## **`{current_value:,.0f}`**")
-
-st.warning("この方法は、アプリを利用するすべての人で、同じ値が共有されます。個人用ツールだからこそ使える、最後の切り札です。")
+# --- 各ツールの呼び出し ---
+# 選択されたツールに応じて、対応するモジュールのshow_tool関数を呼び出す
+if tool_selection == "🤝 翻訳ツール":
+    translator_tool.show_tool(gemini_api_key=api_key)
+elif tool_selection == "💰 お小遣い管理":
+    okozukai_recorder_tool.show_tool(gemini_api_key=api_key)
+elif tool_selection == "📅 カレンダー登録":
+    calendar_tool.show_tool(gemini_api_key=api_key)
+elif tool_selection == "📝 議事録作成":
+    gijiroku_tool.show_tool(gemini_api_key=api_key)
+elif tool_selection == "🧠 賢者の記憶":
+    kensha_no_kioku_tool.show_tool(gemini_api_key=api_key)
+elif tool_selection == "❤️ 認知予防ツール":
+    ai_memory_partner_tool.show_tool(gemini_api_key=api_key)

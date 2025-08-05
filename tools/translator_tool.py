@@ -76,7 +76,7 @@ def show_tool(gemini_api_key):
         st.info("このツールが、あなたの家計管理の一助となれば幸いです。")
         st.warning("レシートの読み込みを続けるには、応援ページで「今日の合言葉（4桁の数字）」を確認し、入力してください。")
         
-        portal_url = "https://pray-power-is-god-and-cocoro.com/free3/continue.html"
+        portal_url = "https://pray-power-is-god-and-cocoro.com/free3/continue2.html"
         st.markdown(f'<a href="{portal_url}" target="_blank">応援ページで「今日の合言葉」を確認する →</a>', unsafe_allow_html=True)
         st.divider()
 

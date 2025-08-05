@@ -99,7 +99,7 @@ def show_tool(gemini_api_key):
     is_limit_reached = st.session_state.get(f"{prefix}usage_count", 0) >= usage_limit
     
    # --- UIロジックの分岐 ---
-if is_limit_reached:
+    if is_limit_reached:
     # ★★★ ここが、新しくなった「合言葉システム」です ★★★
     st.success("🎉 たくさんのご利用、ありがとうございます！")
     st.info("このツールが、あなたの世界を広げる一助となれば幸いです。")

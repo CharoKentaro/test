@@ -1,5 +1,5 @@
 # ===============================================================
-# ★★★ okozukai_recorder_tool.py ＜デバッグモード版・完全版＞ ★★★
+# ★★★ okozukai_recorder_tool.py ＜最終解決版＞ ★★★
 # ===============================================================
 import streamlit as st
 import google.generativeai as genai
@@ -46,33 +46,19 @@ def show_tool(gemini_api_key, localS: LocalStorage):
     key_total_spent = f"{prefix}total_spent"
     key_all_receipts = f"{prefix}all_receipt_data"
 
-    # --- デバッグ用コードここから ---
-    st.info("【デバッグ】'okozukai_recorder_tool.py' の show_tool が実行されました。")
-    # --- デバッグ用コードここまで ---
-
     if f"{prefix}initialized" not in st.session_state:
-        # --- デバッグ用コードここから ---
-        st.info("【デバッグ】初回初期化ブロックを実行します。")
-        raw_allowance = localS.getItem(key_allowance)
-        st.write(f"【デバッグ】LocalStorageから'{key_allowance}'を読み込み試行。取得値: `{raw_allowance}` (型: `{type(raw_allowance)}`)")
-        # --- デバッグ用コードここまで ---
-
-        st.session_state[key_allowance] = float(raw_allowance or 0.0)
+        st.session_state[key_allowance] = float(localS.getItem(key_allowance) or 0.0)
         st.session_state[key_total_spent] = float(localS.getItem(key_total_spent) or 0.0)
         st.session_state[key_all_receipts] = localS.getItem(key_all_receipts) or []
         st.session_state[f"{prefix}receipt_preview"] = None
         st.session_state[f"{prefix}usage_count"] = 0
         st.session_state[f"{prefix}initialized"] = True
-        
-        # --- デバッグ用コードここから ---
-        st.write(f"【デバッグ】初期化後の st.session_state['{key_allowance}']: `{st.session_state[key_allowance]}`")
-        # --- デバッグ用コードここまで ---
 
     usage_limit = 1
     is_limit_reached = st.session_state.get(f"{prefix}usage_count", 0) >= usage_limit
 
     if is_limit_reached:
-        # アンロック・モード
+        # (アンロック・モードは変更なし)
         st.success("🎉 たくさんのご利用、ありがとうございます！")
         st.info("このツールが、あなたの家計管理の一助となれば幸いです。")
         st.warning("レシートの読み込みを続けるには、応援ページで「今日の合言葉（4桁の数字）」を確認し、入力してください。")
@@ -96,7 +82,7 @@ def show_tool(gemini_api_key, localS: LocalStorage):
                 st.error("合言葉が違うようです。応援ページで、もう一度ご確認ください。")
 
     elif st.session_state[f"{prefix}receipt_preview"]:
-        # 確認モード
+        # (確認モードは変更なし)
         st.subheader("📝 支出の確認")
         st.info("AIが読み取った内容を確認・修正し、問題なければ「確定」してください。")
         preview_data = st.session_state[f"{prefix}receipt_preview"]
@@ -144,43 +130,29 @@ def show_tool(gemini_api_key, localS: LocalStorage):
         with st.expander("💳 今月のお小遣い設定", expanded=(st.session_state[key_allowance] == 0)):
             st.warning("⚠️ **ご注意**: ブラウザの「プライベートモード」や「シークレットモード」では、設定した金額が保存されません。通常のモードでご利用ください。")
             
-            # --- デバッグ用コードここから ---
-            st.info(f"【デバッグ】フォーム描画前の st.session_state['{key_allowance}']: `{st.session_state.get(key_allowance)}`")
-            # --- デバッグ用コードここまで ---
-
             with st.form(key=f"{prefix}allowance_form"):
                 new_allowance = st.number_input(
                     "今月のお小遣いを入力してください", 
                     value=st.session_state[key_allowance], 
                     step=1000.0, 
-                    min_value=0.0,
-                    key=f"{prefix}allowance_input"
+                    min_value=0.0
                 )
+                
                 submitted = st.form_submit_button("この金額で設定する", use_container_width=True, type="primary")
                 
+                # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+                # ★★★ ここが、真犯人を排除した、最終解決策です ★★★
+                # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
                 if submitted:
-                    # --- デバッグ用コードここから ---
-                    st.success("【デバッグ】「この金額で設定する」ボタンが押されました！")
-                    st.write(f"【デバッグ】フォームから入力された値 (new_allowance): `{new_allowance}` (型: `{type(new_allowance)}`)")
-                    # --- デバッグ用コードここまで ---
-
                     st.session_state[key_allowance] = new_allowance
-                    
-                    # --- デバッグ用コードここから ---
-                    st.write(f"【デバッグ】st.session_state['{key_allowance}'] を `{new_allowance}` に更新しました。")
-                    st.info(f"【デバッグ】これから localS.setItem('{key_allowance}', {new_allowance}) を呼び出します...")
-                    # --- デバッグ用コードここまで ---
-
                     localS.setItem(key_allowance, new_allowance, key="okozukai_allowance_storage")
                     
-                    st.success(f"お小遣いを {new_allowance:,.0f} 円に設定し、ブラウザに保存します…")
+                    # 画面を邪魔しない st.toast で、完了をシンプルに通知する
+                    st.toast(f"✅ お小遣いを {new_allowance:,.0f} 円に設定しました！")
                     
-                    # --- デバッグ用コードここから ---
-                    st.warning("【デバッグ】1.5秒待機後、st.rerun() を実行してページを再描画します。")
-                    # --- デバッグ用コードここまで ---
-
-                    time.sleep(1.5)
-                    st.rerun()
+                    # time.sleep と st.rerun() を削除。
+                    # これが悪夢のレースコンディションを引き起こしていた。
+                    # フォーム送信後は、何もしなくてもStreamlitが自動で画面を更新してくれる。
         
         st.divider()
         st.subheader("📊 現在の状況")

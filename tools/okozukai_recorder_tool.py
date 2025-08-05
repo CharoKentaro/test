@@ -82,6 +82,7 @@ def show_tool(gemini_api_key): # LocalStorageは、もう、受け取らない
 
     st.divider()
 
+    # ... (これ以降のコードは、私が前回提示した【ユーザー主権・完成版】と、完全に同じです) ...
     if is_limit_reached:
         # アンロック・モード
         st.success("🎉 たくさんのご利用、ありがとうございます！")
@@ -109,7 +110,6 @@ def show_tool(gemini_api_key): # LocalStorageは、もう、受け取らない
     elif st.session_state[f"{prefix}receipt_preview"]:
         # 確認モード
         st.subheader("📝 支出の確認")
-        # ... (この中身は、完全に変更なし) ...
         st.info("AIが読み取った内容を確認・修正し、問題なければ「確定」してください。")
         preview_data = st.session_state[f"{prefix}receipt_preview"]
         corrected_amount = st.number_input("AIが読み取った合計金額はこちらです。必要なら修正してください。", value=preview_data['total_amount'], min_value=0.0, step=1.0, key=f"{prefix}correction_input")
@@ -149,7 +149,6 @@ def show_tool(gemini_api_key): # LocalStorageは、もう、受け取らない
         # 通常モード
         st.info("レシートを登録して、今月使えるお金を管理しよう！")
         st.caption(f"🚀 あと {usage_limit - st.session_state.get(f'{prefix}usage_count', 0)} 回、レシートを読み込めます。")
-
         with st.expander("💳 今月のお小遣い設定", expanded=(st.session_state[f"{prefix}monthly_allowance"] == 0)):
              with st.form(key=f"{prefix}allowance_form"):
                 new_allowance = st.number_input("今月のお小遣いを入力してください", value=st.session_state[f"{prefix}monthly_allowance"], step=1000.0, min_value=0.0)
@@ -157,8 +156,6 @@ def show_tool(gemini_api_key): # LocalStorageは、もう、受け取らない
                     st.session_state[f"{prefix}monthly_allowance"] = new_allowance
                     st.success(f"今月のお小遣いを {new_allowance:,.0f} 円に設定しました！")
                     st.rerun()
-        
-        # ... (中盤のUI部分は、完全に変更なし) ...
         st.divider()
         st.subheader("📊 現在の状況")
         current_allowance = st.session_state[f"{prefix}monthly_allowance"]
@@ -174,7 +171,6 @@ def show_tool(gemini_api_key): # LocalStorageは、もう、受け取らない
             progress_ratio = min(current_spent / current_allowance, 1.0)
             st.progress(progress_ratio)
             st.caption(f"予算使用率: {progress_ratio * 100:.1f}%")
-        
         st.divider()
         st.subheader("📸 レシートを登録する")
         uploaded_file = st.file_uploader("📁 レシート画像をアップロード", type=['png', 'jpg', 'jpeg'], key=f"{prefix}uploader")
@@ -198,7 +194,6 @@ def show_tool(gemini_api_key): # LocalStorageは、もう、受け取らない
                     except Exception as e:
                         st.error(f"❌ 解析エラー: {e}")
                         if 'gemini_response' in locals(): st.code(gemini_response.text, language="text")
-        
         st.divider()
         st.subheader("📜 支出履歴")
         if st.session_state[f"{prefix}all_receipts"]:

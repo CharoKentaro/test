@@ -1,16 +1,15 @@
 # ===============================================================
-# ★★★ okozukai_recorder_tool.py ＜大浄化儀式・完成版＞ ★★★
+# ★★★ okozukai_recorder_tool.py ＜最終神託・ユーザー主権版＞ ★★★
 # ===============================================================
 import streamlit as st
 import google.generativeai as genai
-from streamlit_local_storage import LocalStorage
 import json
 from PIL import Image
 import pandas as pd
 from datetime import datetime, timedelta, timezone
 import time
 
-# --- プロンプトや補助関数（省略） ---
+# --- プロンプトや補助関数（変更なし） ---
 GEMINI_PROMPT = """..."""
 def calculate_remaining_balance(monthly_allowance, total_spent):
     return monthly_allowance - total_spent
@@ -20,55 +19,75 @@ def format_balance_display(balance):
     else:
         return f"🔴 **{abs(balance):,.0f} 円 (予算オーバー)**"
 
-# --- メイン関数 ---
-def show_tool(gemini_api_key):
-    st.header("💰 お小遣い管理", divider='rainbow')
+# ===============================================================
+# メインの仕事 - 最後の祝詞
+# ===============================================================
+def show_tool(gemini_api_key, localS_object=None): # localS_objectはもう使いません
 
-    try:
-        localS = LocalStorage()
-    except Exception as e:
-        st.error(f"🚨 重大なエラー：ローカルストレージの初期化に失敗しました。エラー詳細: {e}")
-        st.stop()
-        
+    st.header("💰 お小遣い管理", divider='rainbow')
+    
     prefix = "okozukai_"
     
-    key_allowance = f"{prefix}monthly_allowance"
-    key_total_spent = f"{prefix}total_spent"
-    key_all_receipts = f"{prefix}all_receipt_data"
-    
-    # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-    # ★★★【大浄化の儀式】過去の亡霊を、自動で祓う ★★★
-    # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-    # この儀式は、ユーザーごとに、ただ一度だけ実行される
-    purification_key = f"{prefix}purified_v1"
-    if not localS.getItem(purification_key):
-        # 過去の、キー指定のない、呪われたデータを、強制的に削除する
-        localS.removeItem("okozukai_monthly_allowance")
-        localS.removeItem("okozukai_total_spent")
-        localS.removeItem("okozukai_all_receipt_data")
-        
-        # 浄化が完了したという、聖なる印を刻む
-        localS.setItem(purification_key, "true")
-        
-        st.toast("✨ アプリのデータを、最新版に、最適化しました。")
-        time.sleep(1)
-        st.rerun() # 浄化後、クリーンな状態で再起動
-
-    # --- 初期化 ---
+    # --- セッションステートの初期化 ---
+    # LocalStorageを一切使わず、セッション内ですべてを管理する
     if f"{prefix}initialized" not in st.session_state:
-        st.session_state[f"{prefix}monthly_allowance"] = float(localS.getItem(key_allowance) or 0.0)
-        st.session_state[f"{prefix}total_spent"] = float(localS.getItem(key_total_spent) or 0.0)
+        st.session_state[f"{prefix}monthly_allowance"] = 0.0
+        st.session_state[f"{prefix}total_spent"] = 0.0
         st.session_state[f"{prefix}receipt_preview"] = None
-        st.session_state[f"{prefix}all_receipts"] = localS.getItem(key_all_receipts) or []
-        st.session_state[f"{prefix}initialized"] = True
-    
-    if f"{prefix}usage_count" not in st.session_state:
+        st.session_state[f"{prefix}all_receipts"] = []
         st.session_state[f"{prefix}usage_count"] = 0
+        st.session_state[f"{prefix}initialized"] = True
 
     usage_limit = 1
     is_limit_reached = st.session_state.get(f"{prefix}usage_count", 0) >= usage_limit
 
-    # ... (これ以降のコードは、私が前回提示した【最終封印版】と、完全に同じです) ...
+    # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+    # ★★★ 『記憶の継承』の儀式（データ復元） ★★★
+    # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+    with st.expander("🗂️ データ管理：前回のデータの保存と復元"):
+        
+        # --- 『記憶の結晶』のダウンロード ---
+        all_data = {
+            "monthly_allowance": st.session_state[f"{prefix}monthly_allowance"],
+            "total_spent": st.session_state[f"{prefix}total_spent"],
+            "all_receipts": st.session_state[f"{prefix}all_receipts"],
+        }
+        json_data = json.dumps(all_data, indent=2, ensure_ascii=False)
+        st.download_button(
+            label="✅ 全データを保存する (JSON)",
+            data=json_data.encode('utf-8-sig'),
+            file_name="okozukai_data.json",
+            mime="application/json",
+            help="現在の予算設定や支出履歴を、一つのファイルとしてPCに保存します。"
+        )
+
+        # --- 『記憶の継承』のアップロード ---
+        uploaded_data_file = st.file_uploader("📂 保存したデータを復元する", type=['json'], key=f"{prefix}data_uploader")
+        if uploaded_data_file is not None:
+            try:
+                restored_data = json.load(uploaded_data_file)
+                st.session_state[f"{prefix}monthly_allowance"] = float(restored_data.get("monthly_allowance", 0.0))
+                st.session_state[f"{prefix}total_spent"] = float(restored_data.get("total_spent", 0.0))
+                st.session_state[f"{prefix}all_receipts"] = restored_data.get("all_receipts", [])
+                st.success("データの復元に成功しました！")
+                time.sleep(1)
+                st.rerun()
+            except Exception as e:
+                st.error(f"データの復元に失敗しました。ファイルが破損している可能性があります。エラー: {e}")
+
+        # --- 全データリセットボタン ---
+        if st.button("⚠️ 全データ完全初期化", use_container_width=True, help="現在の予算設定や支出履歴を、すべて消去します。"):
+            st.session_state[f"{prefix}monthly_allowance"] = 0.0
+            st.session_state[f"{prefix}total_spent"] = 0.0
+            st.session_state[f"{prefix}all_receipts"] = []
+            st.session_state[f"{prefix}receipt_preview"] = None
+            st.session_state[f"{prefix}usage_count"] = 0
+            st.success("全データをリセットしました！"); time.sleep(1); st.rerun()
+
+
+    st.divider()
+
+
     if is_limit_reached:
         # アンロック・モード
         st.success("🎉 たくさんのご利用、ありがとうございます！")
@@ -119,15 +138,13 @@ def show_tool(gemini_api_key):
         col1, col2, col3 = st.columns(3)
         col1.metric("今月の予算", f"{current_allowance:,.0f} 円")
         col2.metric("使った金額", f"{projected_spent:,.0f} 円", delta=f"+{corrected_amount:,.0f} 円", delta_color="inverse")
-        col3.metric("残り予算", f"{projected_balance:,.0f} 円", delta=f"-{corrected_amount:,.0f} 円", delta_color="inverse")
+        col3.metric("残り予算", f"{project-ed_balance:,.0f} 円", delta=f"-{corrected_amount:,.0f} 円", delta_color="inverse")
         st.divider()
         confirm_col, cancel_col = st.columns(2)
         if confirm_col.button("💰 この金額で支出を確定する", type="primary", use_container_width=True):
             new_receipt_record = {"date": datetime.now().strftime('%Y-%m-%d %H:%M'), "total_amount": corrected_amount, "items": edited_df.to_dict('records')}
             st.session_state[f"{prefix}all_receipts"].append(new_receipt_record)
-            localS.setItem(key_all_receipts, st.session_state[f"{prefix}all_receipts"])
             st.session_state[f"{prefix}total_spent"] += corrected_amount
-            localS.setItem(key_total_spent, st.session_state[f"{prefix}total_spent"])
             st.session_state[f"{prefix}receipt_preview"] = None
             st.success(f"🎉 {corrected_amount:,.0f} 円の支出を記録しました！")
             st.balloons()
@@ -147,7 +164,6 @@ def show_tool(gemini_api_key):
                 new_allowance = st.number_input("今月のお小遣いを入力してください", value=st.session_state[f"{prefix}monthly_allowance"], step=1000.0, min_value=0.0)
                 if st.form_submit_button("この金額で設定する", use_container_width=True):
                     st.session_state[f"{prefix}monthly_allowance"] = new_allowance
-                    localS.setItem(key_allowance, new_allowance)
                     st.success(f"今月のお小遣いを {new_allowance:,.0f} 円に設定しました！")
                     st.rerun()
         
@@ -190,30 +206,3 @@ def show_tool(gemini_api_key):
                     except Exception as e:
                         st.error(f"❌ 解析エラー: {e}")
                         if 'gemini_response' in locals(): st.code(gemini_response.text, language="text")
-        
-        st.divider()
-        st.subheader("🗂️ データ管理")
-        if st.session_state[f"{prefix}all_receipts"]:
-            st.info(f"現在、{len(st.session_state[f'{prefix}all_receipts'])} 件のレシートデータが保存されています。")
-            flat_list_for_csv = []
-            for receipt in st.session_state[f'{prefix}all_receipts']:
-                items = receipt.get('items');
-                if not items: continue
-                for item in items: flat_list_for_csv.append({ "日付": receipt.get('date', 'N/A'), "品物名": item.get('name', 'N/A'), "金額": item.get('price', 0), "レシート合計": receipt.get('total_amount', 0) })
-            if flat_list_for_csv:
-                df_for_csv = pd.DataFrame(flat_list_for_csv)
-                st.download_button(label="✅ 全支出履歴をCSVでダウンロード", data=df_for_csv.to_csv(index=False, encoding='utf-8-sig'), file_name=f"okozukai_history_{datetime.now().strftime('%Y%m%d')}.csv", mime="text/csv")
-        c1, c2 = st.columns(2)
-        if c1.button("支出履歴のみリセット", use_container_width=True):
-            st.session_state[f"{prefix}total_spent"] = 0.0
-            st.session_state[f"{prefix}all_receipts"] = []
-            localS.setItem(key_total_spent, 0.0)
-            localS.setItem(key_all_receipts, [])
-            st.success("支出履歴をリセットしました！"); time.sleep(1); st.rerun()
-        if c2.button("⚠️ 全データ完全初期化", use_container_width=True, help="予算設定も含め、このツールの全データを消去します。"):
-            localS.setItem(key_allowance, 0.0)
-            localS.setItem(key_total_spent, 0.0)
-            localS.setItem(key_all_receipts, [])
-            for key in list(st.session_state.keys()):
-                if key.startswith(prefix): del st.session_state[key]
-            st.success("全データをリセットしました！"); time.sleep(1); st.rerun()

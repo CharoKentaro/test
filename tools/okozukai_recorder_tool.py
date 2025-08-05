@@ -1,60 +1,71 @@
 # ===============================================================
-# ★★★ app.py ＜ゼロからの再出発版＞ ★★★
+# ★★★ app.py ＜支配者への最終抵抗版＞ ★★★
 # ===============================================================
 import streamlit as st
+import json
+from pathlib import Path
 
-st.set_page_config(page_title="シンプル保存テスト", page_icon="💾")
+st.set_page_config(page_title="最終抵抗テスト", page_icon="💾")
+st.title("💾 サーバー直接保存テスト")
 
-st.title("💾 シンプル保存テスト")
+# --- 唯一の記憶装置：サーバー上のファイル ---
+# このファイルは、ブラウザがリロードしても消えない
+STATE_FILE = Path("state.json")
+
+# --- データの読み書きを行う関数 ---
+
+def read_state():
+    """サーバー上のファイルから数値を読み込む"""
+    if STATE_FILE.exists():
+        with STATE_FILE.open("r") as f:
+            try:
+                data = json.load(f)
+                # "value" キーの値を取得、なければ0.0
+                return float(data.get("value", 0.0))
+            except (json.JSONDecodeError, ValueError):
+                # ファイルが空か壊れている場合は0.0を返す
+                return 0.0
+    else:
+        # ファイルが存在しない初回は0.0を返す
+        return 0.0
+
+def write_state(value):
+    """サーバー上のファイルに数値を書き込む"""
+    with STATE_FILE.open("w") as f:
+        json.dump({"value": float(value)}, f)
+    st.toast("サーバーに値を保存しました！", icon="✅")
+
+
+# --- アプリのロジック ---
+
+# 1. 起動時に、サーバー上のファイルから現在の値を読み込む
+current_value = read_state()
+
+# 2. UIの表示
 st.info(
-    "このアプリの目的はただ一つです。"
-    "下のボックスに入力した数値が、スマホでリロードしても消えずに残るか、それだけを検証します。"
+    "このアプリは、ブラウザではなく、サーバーに直接データを保存します。"
+    "これでリロードしても値が消えなければ、私たちはついに真犯人を特定したことになります。"
 )
-
-# --- 定義 ---
-# URLで使う、シンプルで短いキー
-URL_KEY = "value" 
-
-# --- ロジック ---
-
-# 1. ページが読み込まれたら、まずURLを見る
-try:
-    # URLに ?value=... があれば、その値を取得して数値に変換する
-    # なければ、デフォルト値として 0.0 を使う
-    current_value = float(st.query_params.get(URL_KEY, 0.0))
-except (AttributeError, ValueError):
-    st.error("お使いのStreamlitのバージョンが古いか、URLの値が不正です。")
-    current_value = 0.0
-
-# 2. ユーザーが値を変更したら、即座にURLを書き換えるコールバック関数
-def update_url():
-    # 入力ボックスの現在の値を取得
-    new_value = st.session_state["input_widget"]
-    # URLを直接書き換える (?value=... の部分)
-    st.query_params[URL_KEY] = str(float(new_value))
-
-# 3. UIの表示
 st.divider()
 
-# number_inputウィジェットを配置
-st.number_input(
+# 今回は、ボタンを押した時だけ保存する、最も確実な方法を採用
+input_value = st.number_input(
     label="ここに数値を入力してください",
-    value=current_value,  # 表示する値は、URLから取得した値
+    value=current_value,
     step=1000.0,
-    key="input_widget",  # ウィジェットを特定するためのキー
-    on_change=update_url,  # 値が変更されたら、update_url関数を呼び出す
-    help="入力後、Enterキーを押すか、枠の外をクリックするとURLが更新されます。"
+    key="input_widget"
 )
+
+if st.button("この数値をサーバーに保存する", type="primary"):
+    # ボタンが押されたら、書き込み関数を呼び出す
+    write_state(input_value)
+    # Streamlitに値を再読み込みさせるために、リロードする
+    st.rerun()
 
 st.divider()
 
 # --- 結果の確認 ---
-st.subheader("現在の保存されている値")
-
-# 強調表示で、現在の値を分かりやすく見せる
+st.subheader("現在のサーバーに保存されている値")
 st.markdown(f"## **`{current_value:,.0f}`**")
 
-st.warning(
-    "操作方法：数値を入力した後、ブラウザの「リロード（再読み込み）」ボタンを押してください。"
-    "この数値が消えなければ、私たちの勝利です。"
-)
+st.warning("この方法は、アプリを利用するすべての人で、同じ値が共有されます。個人用ツールだからこそ使える、最後の切り札です。")

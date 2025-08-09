@@ -1,11 +1,10 @@
 streamlit
 google-generativeai
-streamlit-mic-recorder
-streamlit-local-storage
-google-cloud-firestore
-beautifulsoup4
 pandas
-streamlit-google-auth
+streamlit-mic-recorder
+requests
+beautifulsoup4
+# --- ↓↓↓ 認証ライブラリを成功例に合わせる ↓↓↓ ---
 google-api-python-client
 google-auth-httplib2
-google-auth-oauthlib
+google-auth-oauthlib # ← これが核心です

@@ -9,7 +9,8 @@ from PIL import Image
 import time
 import pandas as pd
 from datetime import datetime, timedelta, timezone
-from tools import translator_tool, calendar_tool, gijiroku_tool, kensha_no_kioku_tool, ai_memory_partner_tool
+# ▼▼▼ job_search_tool をインポート ▼▼▼
+from tools import translator_tool, calendar_tool, gijiroku_tool, kensha_no_kioku_tool, ai_memory_partner_tool, job_search_tool
 
 # ---------------------------------------------------------------
 # Section 1: 永続化のためのコア機能
@@ -96,13 +97,12 @@ with st.sidebar:
         st.success("キーをクリアしました。"); time.sleep(1); st.rerun()
     
     st.divider()
-    # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-    # ★★★ ここが、キーの衝突を回避する修正点です ★★★
-    # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+    
+    # ▼▼▼ st.radioに新しいツールを追加 ▼▼▼
     st.radio(
         "利用するツールを選択してください:",
-        ("💰 お小遣い管理", "🤝 翻訳ツール", "📅 カレンダー登録", "📝 議事録作成", "🧠 賢者の記憶", "❤️ 認知予防ツール"),
-        key="tool_selection_sidebar" # 衝突しないユニークなキーに修正
+        ("💰 お小遣い管理", "🤝 翻訳ツール", "📅 カレンダー登録", "📝 議事録作成", "🧠 賢者の記憶", "❤️ 認知予防ツール", "💼 新着案件ウォッチャー"),
+        key="tool_selection_sidebar"
     )
     st.divider()
     st.markdown("""<div style="font-size: 0.9em;"><a href="https://aistudio.google.com/app/apikey" target="_blank">Gemini APIキーの取得はこちら</a></div>""", unsafe_allow_html=True)
@@ -111,9 +111,6 @@ with st.sidebar:
 # --- メインコンテンツの分岐 ---
 api_key = st.session_state.app_state.get('gemini_api_key', '')
 
-# ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-# ★★★ サイドバーで設定した、正しいキーを参照します ★★★
-# ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
 if st.session_state.get("tool_selection_sidebar") == "💰 お小遣い管理":
     st.header("💰 お小遣い管理", divider='rainbow')
 
@@ -253,3 +250,6 @@ elif st.session_state.get("tool_selection_sidebar") == "🧠 賢者の記憶":
     kensha_no_kioku_tool.show_tool(gemini_api_key=api_key)
 elif st.session_state.get("tool_selection_sidebar") == "❤️ 認知予防ツール":
     ai_memory_partner_tool.show_tool(gemini_api_key=api_key)
+# ▼▼▼ 新しいツールの呼び出しを追加 ▼▼▼
+elif st.session_state.get("tool_selection_sidebar") == "💼 新着案件ウォッチャー":
+    job_search_tool.show_tool(gemini_api_key=api_key)

@@ -1,5 +1,5 @@
 # =====================================================================
-# ★★★ job_search_tool.py ＜スクレイピングURL修正・最終版＞ ★★★
+# ★★★ job_search_tool.py ＜HTML構造の変更に対応した最終版＞ ★★★
 # =====================================================================
 import streamlit as st
 import requests
@@ -7,7 +7,7 @@ from bs4 import BeautifulSoup
 import pandas as pd
 import time
 import traceback
-import urllib.parse # ★ URLエンコードのためにインポート
+import urllib.parse 
 
 # ★ 認証関連のライブラリ ★
 from googleapiclient.discovery import build
@@ -18,37 +18,45 @@ from email.mime.text import MIMEText
 # --- Webスクレイピング関数 ---
 def search_jobs_on_kyujinbox(keywords):
     try:
-        # ★★★ 新しいURL生成ロジック ★★★
-        # キーワードをスペースで分割し、ハイフンで連結
         search_words = keywords.split()
         path_keywords = "-".join(search_words)
-        # 日本語などをURLで安全に使えるようにエンコード
         encoded_keywords = urllib.parse.quote(path_keywords)
-        # 新しいURL構造に合わせてURLを組み立てる
         search_url = f"https://xn--pckua2a7gp15o89zb.com/{encoded_keywords}の仕事"
         
         headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"}
         
         with st.spinner(f"「{keywords}」の案件を求人ボックスで検索中..."):
             response = requests.get(search_url, headers=headers, timeout=10)
-            response.raise_for_status() # 404などのエラーがあれば、ここで例外を発生させる
+            response.raise_for_status() 
             soup = BeautifulSoup(response.content, "html.parser")
-            job_cards = soup.find_all("div", class_=lambda c: c and ("p-job_list-item" in c or "result_card_" in c))
+
+            # ★★★ ここが最重要の修正点：新しいHTMLのクラス名に対応 ★★★
+            # 複数の候補を試すことで、将来の変更にも少しだけ強くする
+            job_cards = soup.find_all("div", class_=lambda c: c and ("job-ui-box" in c or "p-job_list-item" in c or "style_job-item" in c))
+
+            # --- デバッグ用：取得したHTMLの情報を表示 ---
+            # if not job_cards:
+            #     st.info("デバッグ情報：求人カードが見つかりませんでした。サイトのHTML構造が変更された可能性があります。")
+            #     st.code(soup.prettify()[:5000]) # HTMLの先頭5000文字を表示
+
             results = []
             if not job_cards:
                 return []
+
             for card in job_cards:
-                # (情報の抽出ロジックは変更なし)
-                title_tag = card.find("h3", class_=lambda c: c and "heading_title" in c)
-                company_tag = card.find("span", class_=lambda c: c and "text_company" in c)
+                # ★★★ 情報抽出ロジックも、最新の構造に合わせて少しだけ修正 ★★★
+                title_tag = card.find("p", class_=lambda c: c and "job-name" in c) or card.find("h3")
+                company_tag = card.find("p", class_=lambda c: c and "job-office-name" in c) or card.find("span", class_=lambda c: c and "text_company" in c)
                 link_tag = card.find("a", href=True)
+                
                 title = title_tag.text.strip() if title_tag else "タイトル不明"
                 company = company_tag.text.strip() if company_tag else "会社名不明"
                 url = "https://xn--pckua2a7gp15o89zb.com" + link_tag['href'] if link_tag and link_tag['href'].startswith('/') else link_tag['href'] if link_tag else "URL不明"
-                results.append({"案件タイトル": title, "会社名": company, "詳細URL": url})
+                
+                if "タイトル不明" not in title:
+                    results.append({"案件タイトル": title, "会社名": company, "詳細URL": url})
         return results
     except requests.exceptions.HTTPError as e:
-        # 404エラーをより分かりやすく表示
         st.error(f"情報の取得中にエラーが発生しました: {e}")
         st.warning("検索対象サイトのURL構造が変更されたか、該当するキーワードのページが存在しない可能性があります。")
         return None

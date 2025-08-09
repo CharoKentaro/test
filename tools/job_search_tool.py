@@ -1,5 +1,5 @@
 # =====================================================================
-# ★★★ job_search_tool.py ＜ライブラリのソースコード準拠・最終版＞ ★★★
+# ★★★ job_search_tool.py ＜公式ドキュメント準拠・最終確定版＞ ★★★
 # =====================================================================
 import streamlit as st
 import requests
@@ -8,16 +8,18 @@ import pandas as pd
 import time
 from datetime import datetime, timezone, timedelta
 
-# ★★★ 正しいライブラリから、正しいクラス 'Google' をインポート ★★★
-from streamlit_google_auth import Google
+# ★★★ 公式ドキュメントに基づいた、正しい関数をインポート ★★★
+from streamlit_google_auth import get_login_button, get_user_info
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 import base64
 from email.mime.text import MIMEText
+import asyncio
 
 # --- Webスクレイピング関数 (変更なし) ---
 def search_jobs_on_kyujinbox(keywords):
+    # (この関数の内容は変更ありません)
     search_url = f"https://xn--pckua2a7gp15o89zb.com/kw-{'+'.join(keywords.split())}"
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"}
     try:
@@ -45,10 +47,11 @@ def search_jobs_on_kyujinbox(keywords):
 
 # --- OAuth認証を使ったGmail送信関数 (変更なし) ---
 def send_gmail_with_oauth(user_info, token, keywords, results_df):
+    # (この関数の内容は変更ありません)
     try:
         creds = Credentials(token=token)
         service = build('gmail', 'v1', credentials=creds)
-        recipient_address = user_info['emailAddress']
+        recipient_address = user_info['email']
 
         with st.spinner(f"{recipient_address} 宛にメールを送信しています..."):
             subject = f"【新着案件ウォッチャー】「{keywords}」の検索結果"
@@ -86,69 +89,86 @@ def show_tool(gemini_api_key):
     # ↓↓↓ ここのURLは、必ずご自身のアプリのURLに書き換えてください！
     redirect_uri = "https://your-app-name.streamlit.app" 
     
-    # ★★★ Googleオブジェクトを初期化 ★★★
-    google = Google(
-        client_id=client_id,
-        client_secret=client_secret,
-        redirect_uri=redirect_uri,
-        scopes=['https://www.googleapis.com/auth/gmail.send', 'https://www.googleapis.com/auth/userinfo.email', 'https://www.googleapis.com/auth/userinfo.profile'],
-    )
-    
-    # ★★★ google.loginメソッドを呼び出し、トークンを取得 ★★★
-    token = google.login(
-        button_text="Googleでログインして案件を探す", 
-        button_color="#FD504D",
-        button_icon="https://fonts.gstatic.com/s/i/productlogos/googleg/v6/24px.svg"
-    )
+    scopes=['https://www.googleapis.com/auth/gmail.send', 'https://www.googleapis.com/auth/userinfo.email', 'https://www.googleapis.com/auth/userinfo.profile']
 
-    # ★★★ ログイン成功後（トークン取得後）の処理 ★★★
-    if token:
-        creds = Credentials(token=token['access_token'])
-        service = build('gmail', 'v1', credentials=creds)
-        user_info = service.users().getProfile(userId='me').execute()
-
-        st.success(f"ようこそ、{user_info.get('name', 'ユーザー')}さん！")
-        st.divider()
-
-        prefix = "job_search_"
-        if f"{prefix}results" not in st.session_state:
-            st.session_state[f"{prefix}results"] = None
-
-        with st.form("job_search_form"):
-            keywords = st.text_input("検索キーワード", placeholder="例: Python 業務委託")
-            submitted = st.form_submit_button("🔍 このキーワードで検索する", type="primary", use_container_width=True)
-        
-        if submitted:
-            if not keywords:
-                st.warning("キーワードを入力してください。")
-            else:
-                search_results = search_jobs_on_kyujinbox(keywords)
-                st.session_state[f"{prefix}results"] = search_results
-                st.session_state[f"{prefix}keywords"] = keywords
-                if search_results:
-                     st.success(f"{len(search_results)} 件の案件が見つかりました！")
-                time.sleep(1)
-                st.rerun()
-
-        if st.session_state[f"{prefix}results"] is not None:
-            st.divider()
-            results = st.session_state[f"{prefix}results"]
+    # ★★★ 認証コードがあるかチェック ★★★
+    if 'code' not in st.query_params:
+        # --- 認証コードがない場合：ログインボタンを表示 ---
+        st.info("下のボタンからGoogleアカウントでログインして、検索を開始してください。")
+        login_button_url = get_login_button(
+            client_id=client_id,
+            client_secret=client_secret,
+            redirect_uri=redirect_uri,
+            scopes=scopes
+        )
+        st.link_button("Googleでログインして案件を探す", login_button_url)
+    else:
+        # --- 認証コードがある場合：ユーザー情報を取得 ---
+        auth_code = st.query_params['code']
+        try:
+            # ユーザー情報をセッションに保存
+            if 'user_info' not in st.session_state:
+                user_info, token = asyncio.run(get_user_info(
+                    client_id=client_id,
+                    client_secret=client_secret,
+                    redirect_uri=redirect_uri,
+                    code=auth_code,
+                    scopes=scopes
+                ))
+                st.session_state.user_info = user_info
+                st.session_state.token = token
             
-            if not results:
-                st.info("該当する案件は見つかりませんでした。")
-            else:
-                st.subheader(f"「{st.session_state[f'{prefix}keywords']}」の検索結果")
-                df = pd.DataFrame(results)
-                st.dataframe(df, use_container_width=True, hide_index=True)
-                
-                if st.button("📧 この結果を自分のGmailに送信する", type="primary", use_container_width=True):
-                    send_gmail_with_oauth(
-                        user_info=user_info, 
-                        token=token['access_token'], 
-                        keywords=st.session_state[f'{prefix}keywords'], 
-                        results_df=df
-                    )
+            user_info = st.session_state.user_info
+            token = st.session_state.token
 
-            if st.button("検索結果をクリア", key=f"{prefix}clear_results"):
+            st.success(f"ようこそ、{user_info.get('name', 'ユーザー')}さん！")
+            st.divider()
+
+            # --- ログイン後のアプリ本体 ---
+            prefix = "job_search_"
+            if f"{prefix}results" not in st.session_state:
                 st.session_state[f"{prefix}results"] = None
-                st.rerun()
+
+            with st.form("job_search_form"):
+                keywords = st.text_input("検索キーワード", placeholder="例: Python 業務委託")
+                submitted = st.form_submit_button("🔍 このキーワードで検索する", type="primary", use_container_width=True)
+            
+            if submitted:
+                if not keywords:
+                    st.warning("キーワードを入力してください。")
+                else:
+                    search_results = search_jobs_on_kyujinbox(keywords)
+                    st.session_state[f"{prefix}results"] = search_results
+                    st.session_state[f"{prefix}keywords"] = keywords
+                    if search_results:
+                         st.success(f"{len(search_results)} 件の案件が見つかりました！")
+                    time.sleep(1)
+                    st.rerun()
+
+            if st.session_state[f"{prefix}results"] is not None:
+                st.divider()
+                results = st.session_state[f"{prefix}results"]
+                
+                if not results:
+                    st.info("該当する案件は見つかりませんでした。")
+                else:
+                    st.subheader(f"「{st.session_state[f'{prefix}keywords']}」の検索結果")
+                    df = pd.DataFrame(results)
+                    st.dataframe(df, use_container_width=True, hide_index=True)
+                    
+                    if st.button("📧 この結果を自分のGmailに送信する", type="primary", use_container_width=True):
+                        send_gmail_with_oauth(
+                            user_info=user_info, 
+                            token=token, 
+                            keywords=st.session_state[f'{prefix}keywords'], 
+                            results_df=df
+                        )
+
+                if st.button("検索結果をクリア", key=f"{prefix}clear_results"):
+                    st.session_state[f"{prefix}results"] = None
+                    st.rerun()
+
+        except Exception as e:
+            st.error("認証中にエラーが発生しました。")
+            st.error(e)
+            st.warning("お手数ですが、ページを再読み込みして、再度ログインをお試しください。")

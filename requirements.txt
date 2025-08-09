@@ -4,3 +4,5 @@ pandas
 streamlit-mic-recorder
 requests
 beautifulsoup4
+# --- SerpApiのライブラリ ---
+google-search-results

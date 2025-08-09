@@ -4,7 +4,3 @@ pandas
 streamlit-mic-recorder
 requests
 beautifulsoup4
-# --- ↓↓↓ 認証ライブラリを成功例に合わせる ↓↓↓ ---
-google-api-python-client
-google-auth-httplib2
-google-auth-oauthlib # ← これが核心です

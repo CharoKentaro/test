@@ -1,6 +1,6 @@
-# ===================================================================
-# ★★★ job_search_tool.py ＜Googleログイン・最終形態・修正版＞ ★★★
-# ===================================================================
+# =====================================================================
+# ★★★ job_search_tool.py ＜ライブラリの正しい使い方・最終修正版＞ ★★★
+# =====================================================================
 import streamlit as st
 import requests
 from bs4 import BeautifulSoup
@@ -8,8 +8,8 @@ import pandas as pd
 import time
 from datetime import datetime, timezone, timedelta
 
-# ★★★ 正しいライブラリ 'streamlit-google-auth' からインポート ★★★
-from streamlit_google_auth import GoogleOAuth
+# ★★★ 正しいライブラリから、正しい関数 'login' をインポート ★★★
+from streamlit_google_auth import login
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
@@ -48,13 +48,13 @@ def search_jobs_on_kyujinbox(keywords):
 def send_gmail_with_oauth(user_info, token, keywords, results_df):
     # (この関数の内容は変更ありません)
     try:
-        creds = Credentials(token=token['access_token'])
+        creds = Credentials(token=token)
         service = build('gmail', 'v1', credentials=creds)
-        recipient_address = user_info['email']
+        recipient_address = user_info['emailAddress']
 
         with st.spinner(f"{recipient_address} 宛にメールを送信しています..."):
             subject = f"【新着案件ウォッチャー】「{keywords}」の検索結果"
-            body = f"{user_info['display_name']}さん、こんにちは！\n\n"
+            body = f"{user_info.get('name', 'ユーザー')}さん、こんにちは！\n\n"
             body += f"ご指定のキーワード「{keywords}」での検索結果をお知らせします。\n\n"
             body += "--- 検索結果 ---\n"
             body += results_df.to_string(index=False)
@@ -64,7 +64,7 @@ def send_gmail_with_oauth(user_info, token, keywords, results_df):
 
             message = MIMEText(body, 'plain', 'utf-8')
             message['to'] = recipient_address
-            message['from'] = f"ちゃろさんのアプリ <{user_info['email']}>"
+            message['from'] = f"ちゃろさんのアプリ <{recipient_address}>"
             message['subject'] = subject
 
             encoded_message = base64.urlsafe_b64encode(message.as_bytes()).decode()
@@ -73,17 +73,13 @@ def send_gmail_with_oauth(user_info, token, keywords, results_df):
             send_message = service.users().messages().send(userId='me', body=create_message).execute()
         
         st.success(f"{recipient_address} に検索結果を送信しました！")
-
     except HttpError as error:
         st.error(f"メール送信中にエラーが発生しました: {error}")
-        st.info("Gmail APIの権限をアプリに許可したか、Google CloudでGmail APIが有効になっているか確認してください。")
     except Exception as e:
         st.error(f"予期せぬエラーが発生しました: {e}")
 
-
-# --- メイン関数 (変更なし) ---
+# --- メイン関数 ---
 def show_tool(gemini_api_key):
-    # (この関数の内容は変更ありません)
     st.header("💼 新着案件ウォッチャー", divider='rainbow')
     
     client_id = st.secrets["GOOGLE_CLIENT_ID"]
@@ -92,22 +88,25 @@ def show_tool(gemini_api_key):
     # ↓↓↓ ここのURLは、必ずご自身のアプリのURLに書き換えてください！
     redirect_uri = "https://your-app-name.streamlit.app" 
     
-    oauth = GoogleOAuth(
+    # ★★★ login関数を直接呼び出し、トークンを取得 ★★★
+    token = login(
         client_id=client_id,
         client_secret=client_secret,
         redirect_uri=redirect_uri,
-        scopes=['https://www.googleapis.com/auth/gmail.send'] 
-    )
-
-    st.info("下のボタンからGoogleアカウントでログインして、検索を開始してください。")
-    user_info, token = oauth.login(
+        scopes=['https://www.googleapis.com/auth/gmail.send', 'https://www.googleapis.com/auth/userinfo.email', 'https://www.googleapis.com/auth/userinfo.profile'],
         button_text="Googleでログインして案件を探す", 
         button_color="#FD504D",
         button_icon="https://fonts.gstatic.com/s/i/productlogos/googleg/v6/24px.svg"
     )
 
-    if user_info:
-        st.success(f"ようこそ、{user_info['display_name']}さん！")
+    # ★★★ ログイン成功後（トークン取得後）の処理 ★★★
+    if token:
+        # トークンを使って認証情報を作成し、Gmail APIを叩いてユーザー情報を取得
+        creds = Credentials(token=token['access_token'])
+        service = build('gmail', 'v1', credentials=creds)
+        user_info = service.users().getProfile(userId='me').execute()
+
+        st.success(f"ようこそ、{user_info.get('name', 'ユーザー')}さん！")
         st.divider()
 
         prefix = "job_search_"
@@ -144,7 +143,7 @@ def show_tool(gemini_api_key):
                 if st.button("📧 この結果を自分のGmailに送信する", type="primary", use_container_width=True):
                     send_gmail_with_oauth(
                         user_info=user_info, 
-                        token=token, 
+                        token=token['access_token'], 
                         keywords=st.session_state[f'{prefix}keywords'], 
                         results_df=df
                     )

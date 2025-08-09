@@ -1,6 +1,6 @@
-# ===================================================================
-# ★★★ app.py ＜コピペ＆ペースト方式・最終完成版＞ ★★★
-# ===================================================================
+# ===============================================================
+# ★★★ app.py ＜クリーンアップ済み・最終完成版＞ ★★★
+# ===============================================================
 import streamlit as st
 import time
 
@@ -22,6 +22,7 @@ with st.sidebar:
     st.radio("利用するツールを選択してください:", ("👔 AIキャリアアナリスト", "🤝 翻訳ツール"), key="tool_selection_sidebar")
     st.divider()
     
+    # ★ Gemini APIキーの管理フォームのみにシンプル化 ★
     if 'gemini_api_key' not in st.session_state:
         st.session_state.gemini_api_key = st.secrets.get("GEMINI_API_KEY", "")
 
@@ -44,7 +45,6 @@ with st.sidebar:
 tool_choice = st.session_state.get("tool_selection_sidebar")
 gemini_api_key = st.session_state.get("gemini_api_key", "")
 
-# ★★★ 各ツールを、必要な引数だけで正しく呼び出す ★★★
 if tool_choice == "👔 AIキャリアアナリスト":
     career_analyzer_tool.show_tool(gemini_api_key=gemini_api_key)
 elif tool_choice == "🤝 翻訳ツール":

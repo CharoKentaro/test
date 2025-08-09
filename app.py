@@ -1,5 +1,5 @@
 # ===============================================================
-# ★★★ app.py ＜ちゃろさんの成功ロジック完全移植・最終版＞ ★★★
+# ★★★ app.py ＜APIキー管理機能も統合した、完全最終版＞ ★★★
 # ===============================================================
 import streamlit as st
 import json
@@ -17,20 +17,11 @@ import traceback
 from tools import translator_tool, calendar_tool, gijiroku_tool, kensha_no_kioku_tool, ai_memory_partner_tool, job_search_tool
 
 # ===============================================================
-# Section 1: アプリの基本設定と永続化機能
+# Section 1: アプリの基本設定
 # ===============================================================
 st.set_page_config(page_title="Multi-Tool Portal", page_icon="🚀", layout="wide")
 
-STATE_FILE = Path("multitool_state.json")
-def read_app_state():
-    if STATE_FILE.exists():
-        with STATE_FILE.open("r", encoding="utf-8") as f:
-            try: return json.load(f)
-            except json.JSONDecodeError: return {}
-    return {}
-def write_app_state(data):
-    with STATE_FILE.open("w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
+# (永続化機能は、今回はセッションステートで管理するため、シンプルにします)
 
 # ===============================================================
 # Section 2: Google認証機能
@@ -59,8 +50,9 @@ def get_google_auth_flow():
         scopes=SCOPE, redirect_uri=REDIRECT_URI)
 
 def google_logout():
-    st.session_state.pop("google_credentials", None)
-    st.session_state.pop("google_user_info", None)
+    keys_to_clear = ["google_credentials", "google_user_info", "gemini_api_key"]
+    for key in keys_to_clear:
+        st.session_state.pop(key, None)
     st.success("ログアウトしました。"); time.sleep(1); st.rerun()
 
 # --- 認証コールバック処理 ---
@@ -68,16 +60,12 @@ if "code" in st.query_params and "google_credentials" not in st.session_state:
     try:
         with st.spinner("Google認証処理中..."):
             flow = get_google_auth_flow()
-            # ★★★ ちゃろさんの成功コードから移植した、エラー対応ロジック ★★★
             flow.fetch_token(code=st.query_params["code"])
             
             creds_dict = {
-                'token': flow.credentials.token,
-                'refresh_token': flow.credentials.refresh_token,
-                'token_uri': flow.credentials.token_uri,
-                'client_id': flow.credentials.client_id,
-                'client_secret': flow.credentials.client_secret,
-                'scopes': flow.credentials.scopes
+                'token': flow.credentials.token, 'refresh_token': flow.credentials.refresh_token,
+                'token_uri': flow.credentials.token_uri, 'client_id': flow.credentials.client_id,
+                'client_secret': flow.credentials.client_secret, 'scopes': flow.credentials.scopes
             }
             st.session_state["google_credentials"] = creds_dict
             
@@ -88,16 +76,10 @@ if "code" in st.query_params and "google_credentials" not in st.session_state:
 
             st.query_params.clear(); st.success("✅ Google認証が完了しました！"); time.sleep(1); st.rerun()
     except Exception as e:
-        # ★★★ ここに「Scope has changed」エラーの対応を追加 ★★★
         if "Scope has changed" in str(e):
-            st.warning("権限スコープが変更されました。認証を再試行します...")
-            st.query_params.clear()
-            time.sleep(2)
-            st.rerun()
+            st.warning("権限スコープが変更されました。認証を再試行します..."); st.query_params.clear(); time.sleep(2); st.rerun()
         else:
-            st.error(f"Google認証中にエラーが発生しました: {e}"); 
-            st.code(traceback.format_exc())
-            st.query_params.clear()
+            st.error(f"Google認証中にエラーが発生しました: {e}"); st.code(traceback.format_exc()); st.query_params.clear()
 
 # ===============================================================
 # Section 3: UI描画とツール起動
@@ -127,9 +109,22 @@ with st.sidebar:
             ("💼 新着案件ウォッチャー", "💰 お小遣い管理", "🤝 翻訳ツール", "📅 カレンダー登録", "📝 議事録作成", "🧠 賢者の記憶", "❤️ 認知予防ツール"),
             key="tool_selection_sidebar"
         )
-    st.divider()
-    # 他のAPIキー入力などは、必要に応じてここに配置
-    # st.markdown("""...""")
+        st.divider()
+        
+        # ★★★ ここにAPIキー管理フォームを設置 ★★★
+        if 'gemini_api_key' not in st.session_state:
+            st.session_state.gemini_api_key = st.secrets.get("GEMINI_API_KEY", "") # Secretsからも読み込み試行
+
+        with st.expander("⚙️ APIキーの設定", expanded=not(st.session_state.gemini_api_key)):
+            with st.form("api_key_form"):
+                api_key_input = st.text_input("Gemini APIキー", type="password", value=st.session_state.gemini_api_key)
+                submitted = st.form_submit_button("💾 保存", use_container_width=True)
+                if submitted:
+                    st.session_state.gemini_api_key = api_key_input
+                    st.success("キーを保存しました！"); time.sleep(1); st.rerun()
+        
+        st.markdown("""<div style="font-size: 0.9em;"><a href="https://aistudio.google.com/app/apikey" target="_blank">Gemini APIキーの取得はこちら</a></div>""", unsafe_allow_html=True)
+
 
 # --- メインコンテンツ ---
 if "google_user_info" not in st.session_state:
@@ -138,21 +133,22 @@ if "google_user_info" not in st.session_state:
 else:
     tool_choice = st.session_state.get("tool_selection_sidebar")
     credentials_dict = st.session_state.get("google_credentials")
-    
+    gemini_api_key = st.session_state.get("gemini_api_key", "")
+
     if not credentials_dict:
         st.warning("認証情報が見つかりません。再度ログインしてください。")
         google_logout()
     else:
         creds = Credentials(**credentials_dict)
         
-        # ★★★ gemini_api_keyをSecretsから安全に取得（他のツールで必要な場合） ★★★
-        gemini_api_key = st.secrets.get("GEMINI_API_KEY", "")
-
         if tool_choice == "💼 新着案件ウォッチャー":
             job_search_tool.show_tool(credentials=creds)
         elif tool_choice == "💰 お小遣い管理":
+             # このツールはおそらくAPIキーも認証も不要
              st.warning("「お小遣い管理」ツールは現在準備中です。")
         elif tool_choice == "🤝 翻訳ツール":
+            # 翻訳ツールにAPIキーを渡す
             translator_tool.show_tool(gemini_api_key=gemini_api_key)
         else:
+            # 他のツールも同様に、必要な情報を渡す
             st.info(f"「{tool_choice}」ツールは現在準備中です。")

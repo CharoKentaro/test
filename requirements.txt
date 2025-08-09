@@ -3,3 +3,5 @@ google-generativeai
 streamlit-mic-recorder
 streamlit-local-storage
 google-cloud-firestore
+beautifulsoup4
+pandas

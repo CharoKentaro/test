@@ -1,5 +1,5 @@
 # ===============================================================
-# ★★★ app.py ＜ちゃろさんの認証ロジック統合・最終版＞ ★★★
+# ★★★ app.py ＜ちゃろさんの成功ロジック完全移植・最終版＞ ★★★
 # ===============================================================
 import streamlit as st
 import json
@@ -68,6 +68,7 @@ if "code" in st.query_params and "google_credentials" not in st.session_state:
     try:
         with st.spinner("Google認証処理中..."):
             flow = get_google_auth_flow()
+            # ★★★ ちゃろさんの成功コードから移植した、エラー対応ロジック ★★★
             flow.fetch_token(code=st.query_params["code"])
             
             creds_dict = {
@@ -87,7 +88,16 @@ if "code" in st.query_params and "google_credentials" not in st.session_state:
 
             st.query_params.clear(); st.success("✅ Google認証が完了しました！"); time.sleep(1); st.rerun()
     except Exception as e:
-        st.error(f"Google認証中にエラーが発生しました: {e}"); st.query_params.clear()
+        # ★★★ ここに「Scope has changed」エラーの対応を追加 ★★★
+        if "Scope has changed" in str(e):
+            st.warning("権限スコープが変更されました。認証を再試行します...")
+            st.query_params.clear()
+            time.sleep(2)
+            st.rerun()
+        else:
+            st.error(f"Google認証中にエラーが発生しました: {e}"); 
+            st.code(traceback.format_exc())
+            st.query_params.clear()
 
 # ===============================================================
 # Section 3: UI描画とツール起動
@@ -101,7 +111,7 @@ with st.sidebar:
     if "google_user_info" not in st.session_state:
         st.info("各ツールを利用するには、Googleアカウントでのログインが必要です。")
         flow = get_google_auth_flow()
-        authorization_url, _ = flow.authorization_url(prompt="consent", access_type="offline")
+        authorization_url, _ = flow.authorization_url(prompt="consent", access_type="offline", include_granted_scopes='true')
         st.link_button("🗝️ Googleアカウントでログイン", authorization_url, use_container_width=True)
     else:
         user_info = st.session_state.get("google_user_info", {})
@@ -118,7 +128,8 @@ with st.sidebar:
             key="tool_selection_sidebar"
         )
     st.divider()
-    st.markdown("""<div style="font-size: 0.9em;"><a href="https://aistudio.google.com/app/apikey" target="_blank">Gemini APIキーの取得はこちら</a></div>""", unsafe_allow_html=True)
+    # 他のAPIキー入力などは、必要に応じてここに配置
+    # st.markdown("""...""")
 
 # --- メインコンテンツ ---
 if "google_user_info" not in st.session_state:
@@ -128,18 +139,20 @@ else:
     tool_choice = st.session_state.get("tool_selection_sidebar")
     credentials_dict = st.session_state.get("google_credentials")
     
-    # ログイン情報を元に、ツールで使える形式の認証オブジェクトを作成
-    creds = Credentials(**credentials_dict) if credentials_dict else None
-    
-    if tool_choice == "💼 新着案件ウォッチャー":
-        job_search_tool.show_tool(credentials=creds)
-    elif tool_choice == "💰 お小遣い管理":
-        # このツールは認証を使わないので、そのまま呼び出す
-        # okozukai_tool.show_tool() のような形
-        st.warning("「お小遣い管理」ツールは現在準備中です。")
-    elif tool_choice == "🤝 翻訳ツール":
-        # このツールにAPIキーが必要なら、別途フォームを設けるか、
-        # Secretsから読み込むなどして渡す必要があります。
-        translator_tool.show_tool(gemini_api_key=st.secrets.get("GEMINI_API_KEY")) #例
+    if not credentials_dict:
+        st.warning("認証情報が見つかりません。再度ログインしてください。")
+        google_logout()
     else:
-        st.info(f"「{tool_choice}」ツールは現在準備中です。")
+        creds = Credentials(**credentials_dict)
+        
+        # ★★★ gemini_api_keyをSecretsから安全に取得（他のツールで必要な場合） ★★★
+        gemini_api_key = st.secrets.get("GEMINI_API_KEY", "")
+
+        if tool_choice == "💼 新着案件ウォッチャー":
+            job_search_tool.show_tool(credentials=creds)
+        elif tool_choice == "💰 お小遣い管理":
+             st.warning("「お小遣い管理」ツールは現在準備中です。")
+        elif tool_choice == "🤝 翻訳ツール":
+            translator_tool.show_tool(gemini_api_key=gemini_api_key)
+        else:
+            st.info(f"「{tool_choice}」ツールは現在準備中です。")

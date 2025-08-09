@@ -1,5 +1,5 @@
 # =====================================================================
-# ★★★ job_search_tool.py ＜HTML構造の変更に対応した最終版＞ ★★★
+# ★★★ job_search_tool.py ＜ターゲットをIndeedに変更した最終版＞ ★★★
 # =====================================================================
 import streamlit as st
 import requests
@@ -15,50 +15,46 @@ from googleapiclient.errors import HttpError
 import base64
 from email.mime.text import MIMEText
 
-# --- Webスクレイピング関数 ---
-def search_jobs_on_kyujinbox(keywords):
+# ★★★ 新しい関数：Indeedから情報を取得 ★★★
+def search_jobs_on_indeed(keywords):
     try:
-        search_words = keywords.split()
-        path_keywords = "-".join(search_words)
-        encoded_keywords = urllib.parse.quote(path_keywords)
-        search_url = f"https://xn--pckua2a7gp15o89zb.com/{encoded_keywords}の仕事"
+        # IndeedのURL構造に合わせてキーワードをエンコード
+        encoded_keywords = urllib.parse.quote_plus(keywords)
+        search_url = f"https://jp.indeed.com/jobs?q={encoded_keywords}"
         
         headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"}
         
-        with st.spinner(f"「{keywords}」の案件を求人ボックスで検索中..."):
-            response = requests.get(search_url, headers=headers, timeout=10)
+        with st.spinner(f"「{keywords}」の案件をIndeedで検索中..."):
+            response = requests.get(search_url, headers=headers, timeout=15)
             response.raise_for_status() 
             soup = BeautifulSoup(response.content, "html.parser")
 
-            # ★★★ ここが最重要の修正点：新しいHTMLのクラス名に対応 ★★★
-            # 複数の候補を試すことで、将来の変更にも少しだけ強くする
-            job_cards = soup.find_all("div", class_=lambda c: c and ("job-ui-box" in c or "p-job_list-item" in c or "style_job-item" in c))
-
-            # --- デバッグ用：取得したHTMLの情報を表示 ---
-            # if not job_cards:
-            #     st.info("デバッグ情報：求人カードが見つかりませんでした。サイトのHTML構造が変更された可能性があります。")
-            #     st.code(soup.prettify()[:5000]) # HTMLの先頭5000文字を表示
+            # Indeedの求人カードは 'job_seen_beacon' という属性を持つことが多い
+            job_cards = soup.find_all("div", class_="job_seen_beacon")
 
             results = []
             if not job_cards:
+                st.info("Indeedで求人情報が見つかりませんでした。サイトの構造が変更されたか、ガードされている可能性があります。")
                 return []
 
             for card in job_cards:
-                # ★★★ 情報抽出ロジックも、最新の構造に合わせて少しだけ修正 ★★★
-                title_tag = card.find("p", class_=lambda c: c and "job-name" in c) or card.find("h3")
-                company_tag = card.find("p", class_=lambda c: c and "job-office-name" in c) or card.find("span", class_=lambda c: c and "text_company" in c)
-                link_tag = card.find("a", href=True)
+                # タイトルとURLを取得
+                title_element = card.select_one('h2.jobTitle > a')
+                if not title_element:
+                    continue # タイトルがなければスキップ
                 
-                title = title_tag.text.strip() if title_tag else "タイトル不明"
-                company = company_tag.text.strip() if company_tag else "会社名不明"
-                url = "https://xn--pckua2a7gp15o89zb.com" + link_tag['href'] if link_tag and link_tag['href'].startswith('/') else link_tag['href'] if link_tag else "URL不明"
-                
-                if "タイトル不明" not in title:
-                    results.append({"案件タイトル": title, "会社名": company, "詳細URL": url})
+                title = title_element.get_text(strip=True)
+                url = "https://jp.indeed.com" + title_element['href']
+
+                # 会社名を取得
+                company_element = card.select_one('span.companyName')
+                company = company_element.get_text(strip=True) if company_element else "会社名不明"
+
+                results.append({"案件タイトル": title, "会社名": company, "詳細URL": url})
         return results
     except requests.exceptions.HTTPError as e:
-        st.error(f"情報の取得中にエラーが発生しました: {e}")
-        st.warning("検索対象サイトのURL構造が変更されたか、該当するキーワードのページが存在しない可能性があります。")
+        st.error(f"Indeedへのアクセス中にエラーが発生しました: {e}")
+        st.warning("Indeedのガードが固いか、IPアドレスが一時的にブロックされている可能性があります。")
         return None
     except Exception as e:
         st.error(f"情報の取得中に予期せぬエラーが発生しました: {e}")
@@ -71,7 +67,7 @@ def send_gmail_with_oauth(credentials, keywords, results_df):
         user_info = service.users().getProfile(userId='me').execute()
         recipient_address = user_info['emailAddress']
         with st.spinner(f"{recipient_address} 宛にメールを送信しています..."):
-            subject = f"【新着案件ウォッチャー】「{keywords}」の検索結果"
+            subject = f"【新着案件ウォッチャー】「{keywords}」の検索結果 (Indeed)"
             body = f"{user_info.get('name', 'ユーザー')}さん、こんにちは！\n\nご指定のキーワード「{keywords}」での検索結果をお知らせします。\n\n--- 検索結果 ---\n{results_df.to_string(index=False)}\n\n------------------\n\nこのメールは、Multi-Tool Portalから自動送信されました。\n"
             message = MIMEText(body, 'plain', 'utf-8')
             message['to'] = recipient_address
@@ -82,25 +78,32 @@ def send_gmail_with_oauth(credentials, keywords, results_df):
     except Exception as e:
         st.error(f"メール送信中にエラーが発生しました: {e}"); st.code(traceback.format_exc())
 
-# --- ツール本体のメイン関数 (変更なし) ---
+# --- ツール本体のメイン関数 ---
 def show_tool(credentials):
     st.header("💼 新着案件ウォッチャー", divider='rainbow')
+    st.info("検索対象を「Indeed」に変更しました。") # ユーザーにお知らせ
     if not credentials: st.warning("認証情報がありません。アプリを再読み込みしてください。"); return
+    
     prefix = "job_search_";
     if f"{prefix}results" not in st.session_state: st.session_state[f"{prefix}results"] = None
+    
     with st.form("job_search_form"):
-        keywords = st.text_input("検索キーワード", placeholder="例: Python 業務委託")
+        keywords = st.text_input("検索キーワード", placeholder="例: Python エンジニア リモート")
         submitted = st.form_submit_button("🔍 このキーワードで検索する", type="primary", use_container_width=True)
+    
     if submitted:
         if not keywords: st.warning("キーワードを入力してください。")
         else:
-            search_results = search_jobs_on_kyujinbox(keywords)
+            # ★★★ 呼び出す関数をIndeed用に変更 ★★★
+            search_results = search_jobs_on_indeed(keywords)
+            
             st.session_state[f"{prefix}results"] = search_results
             st.session_state[f"{prefix}keywords"] = keywords
             if search_results is None: pass
             elif not search_results: st.info("該当する案件は見つかりませんでした。")
             else: st.success(f"{len(search_results)} 件の案件が見つかりました！")
             time.sleep(1); st.rerun()
+            
     if st.session_state.get(f"{prefix}results") is not None:
         st.divider(); results = st.session_state[f"{prefix}results"]
         if results:

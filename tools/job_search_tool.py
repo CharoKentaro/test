@@ -1,5 +1,5 @@
 # =====================================================================
-# ★★★ job_search_tool.py ＜ライブラリの正しい使い方・最終修正版＞ ★★★
+# ★★★ job_search_tool.py ＜ライブラリのソースコード準拠・最終版＞ ★★★
 # =====================================================================
 import streamlit as st
 import requests
@@ -8,8 +8,8 @@ import pandas as pd
 import time
 from datetime import datetime, timezone, timedelta
 
-# ★★★ 正しいライブラリから、正しい関数 'login' をインポート ★★★
-from streamlit_google_auth import login
+# ★★★ 正しいライブラリから、正しいクラス 'Google' をインポート ★★★
+from streamlit_google_auth import Google
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
@@ -18,7 +18,6 @@ from email.mime.text import MIMEText
 
 # --- Webスクレイピング関数 (変更なし) ---
 def search_jobs_on_kyujinbox(keywords):
-    # (この関数の内容は変更ありません)
     search_url = f"https://xn--pckua2a7gp15o89zb.com/kw-{'+'.join(keywords.split())}"
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"}
     try:
@@ -46,7 +45,6 @@ def search_jobs_on_kyujinbox(keywords):
 
 # --- OAuth認証を使ったGmail送信関数 (変更なし) ---
 def send_gmail_with_oauth(user_info, token, keywords, results_df):
-    # (この関数の内容は変更ありません)
     try:
         creds = Credentials(token=token)
         service = build('gmail', 'v1', credentials=creds)
@@ -88,12 +86,16 @@ def show_tool(gemini_api_key):
     # ↓↓↓ ここのURLは、必ずご自身のアプリのURLに書き換えてください！
     redirect_uri = "https://your-app-name.streamlit.app" 
     
-    # ★★★ login関数を直接呼び出し、トークンを取得 ★★★
-    token = login(
+    # ★★★ Googleオブジェクトを初期化 ★★★
+    google = Google(
         client_id=client_id,
         client_secret=client_secret,
         redirect_uri=redirect_uri,
         scopes=['https://www.googleapis.com/auth/gmail.send', 'https://www.googleapis.com/auth/userinfo.email', 'https://www.googleapis.com/auth/userinfo.profile'],
+    )
+    
+    # ★★★ google.loginメソッドを呼び出し、トークンを取得 ★★★
+    token = google.login(
         button_text="Googleでログインして案件を探す", 
         button_color="#FD504D",
         button_icon="https://fonts.gstatic.com/s/i/productlogos/googleg/v6/24px.svg"
@@ -101,7 +103,6 @@ def show_tool(gemini_api_key):
 
     # ★★★ ログイン成功後（トークン取得後）の処理 ★★★
     if token:
-        # トークンを使って認証情報を作成し、Gmail APIを叩いてユーザー情報を取得
         creds = Credentials(token=token['access_token'])
         service = build('gmail', 'v1', credentials=creds)
         user_info = service.users().getProfile(userId='me').execute()

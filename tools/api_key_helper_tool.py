@@ -38,7 +38,7 @@ def show_tool():
         col1, col2 = st.columns([3, 1])
         col1.text_input("設定済みのキー", value=saved_key, type="password", disabled=True)
         if col2.button("🗑️ キーを削除", use_container_width=True):
-            app_state['google_maps_api_key'] = ''
+            del app_state['google_maps_api_key']
             write_app_state(app_state)
             st.success("キーを削除しました。")
             time.sleep(1)
@@ -63,27 +63,44 @@ def show_tool():
     # --- ステップ2 & 3: 魔法のリンクとキー入力 ---
     if project_id:
         st.divider()
-        st.subheader("ステップ2: 2つのリンクを順番にクリックして設定")
-        st.warning("必ずA→Bの順番でクリックして設定を進めてください。")
+        st.subheader("ステップ2: 3つのAPIを有効にする")
+        st.warning("A→B→Cの順番で、リンクを一つずつクリックしてAPIを有効にしてください。")
 
-        col_a, col_b = st.columns(2)
+        col_a, col_b, col_c = st.columns(3)
+        
+        # --- A: Maps JavaScript API ---
         with col_a:
-            st.markdown("**A. Google Maps APIを有効にする**")
-            st.markdown("下のリンクをクリックし、移動先で青い**「有効にする」**ボタンを押してください。")
-            maps_enable_url = f"https://console.cloud.google.com/apis/library/maps-backend.googleapis.com?project={project_id}"
-            st.markdown(f'<a href="{maps_enable_url}" target="_blank" style="display: block; padding: 12px; background-color: #34A853; color: white; text-align: center; text-decoration: none; border-radius: 5px; font-weight: bold;">🅰️ Maps API有効化ページを開く</a>', unsafe_allow_html=True)
+            st.markdown("**A. 地図表示 API**")
+            st.caption("ウェブページに地図を表示するための基本APIです。")
+            maps_js_url = f"https://console.cloud.google.com/apis/library/maps-backend.googleapis.com?project={project_id}"
+            st.markdown(f'<a href="{maps_js_url}" target="_blank" style="display: block; margin-top: 10px; padding: 12px; background-color: #4285F4; color: white; text-align: center; text-decoration: none; border-radius: 5px; font-weight: bold;">🅰️ 地図表示APIを有効化</a>', unsafe_allow_html=True)
 
+        # --- B: Geocoding API ---
         with col_b:
-            st.markdown("**B. APIキーを作成する**")
-            st.markdown("""
-            APIを有効にできたら、次に下のリンクを開き、**「+ 認証情報を作成」 → 「APIキー」**を選択してください。
-            """)
-            credentials_url = f"https://console.cloud.google.com/apis/credentials?project={project_id}"
-            st.markdown(f'<a href="{credentials_url}" target="_blank" style="display: block; padding: 12px; background-color: #FBBC05; color: black; text-align: center; text-decoration: none; border-radius: 5px; font-weight: bold;">🅱️ APIキー作成ページを開く</a>', unsafe_allow_html=True)
+            st.markdown("**B. 住所検索 API**")
+            st.caption("「東京都庁」などの住所を、緯度経度に変換するAPIです。")
+            geocoding_url = f"https://console.cloud.google.com/apis/library/geocoding-backend.googleapis.com?project={project_id}"
+            st.markdown(f'<a href="{geocoding_url}" target="_blank" style="display: block; margin-top: 10px; padding: 12px; background-color: #34A853; color: white; text-align: center; text-decoration: none; border-radius: 5px; font-weight: bold;">🅱️ 住所検索APIを有効化</a>', unsafe_allow_html=True)
+
+        # --- C: Places API ---
+        with col_c:
+            st.markdown("**C. 場所検索 API**")
+            st.caption("近くのカフェやレストランなどを検索するAPIです。")
+            places_url = f"https://console.cloud.google.com/apis/library/places-backend.googleapis.com?project={project_id}"
+            st.markdown(f'<a href="{places_url}" target="_blank" style="display: block; margin-top: 10px; padding: 12px; background-color: #FBBC05; color: black; text-align: center; text-decoration: none; border-radius: 5px; font-weight: bold;">🆎 場所検索APIを有効化</a>', unsafe_allow_html=True)
 
         st.divider()
-        st.subheader("ステップ3: APIキーを保存して完了！")
-        st.markdown("ステップ2-BでコピーしたAPIキーを、下のボックスに貼り付けて「保存」してください。")
+        st.subheader("ステップ3: APIキーを作成して完了！")
+        st.markdown("""
+        上記のAPIをすべて有効にできたら、最後にAPIキーを作成します。
+        1. **下のリンクを開き、移動したページで**
+        2. **画面上部の「+ 認証情報を作成」をクリックし、**
+        3. **「APIキー」を選択してください。**
+        
+        表示されたAPIキーをコピーして、下のボックスに貼り付ければ完了です！
+        """)
+        credentials_url = f"https://console.cloud.google.com/apis/credentials?project={project_id}"
+        st.markdown(f'<a href="{credentials_url}" target="_blank" style="display: inline-block; padding: 12px 20px; background-color: #EA4335; color: white; text-align: center; text-decoration: none; border-radius: 5px; font-weight: bold;">🔑 APIキー作成ページを開く</a>', unsafe_allow_html=True)
 
         with st.form("maps_api_key_form"):
             maps_api_key_input = st.text_input("ここにGoogle Maps APIキーを貼り付け →", type="password")

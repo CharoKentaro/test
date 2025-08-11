@@ -93,9 +93,6 @@ def show_tool():
         st.divider()
         st.subheader("ステップ3: APIキーを作成して完了！")
         
-        # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-        # ★★★ ここが、ちゃろさんのアイデアを反映した最終改善箇所です！ ★★★
-        # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
         st.markdown("""
         上記のAPIをすべて有効にできたら、いよいよ最後のステップです！<br>
         下の**「🔑 APIキー作成ページを開く」**ボタンを押してください。
@@ -105,6 +102,17 @@ def show_tool():
         自動でキーが作成されますので、表示された文字列をコピーして、下のボックスに貼り付ければ完了です！
         """, unsafe_allow_html=True)
         
+        # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+        # ★★★ ここが、ちゃろさんの最後のアイデアを反映した究極の改善箇所です！ ★★★
+        # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+        st.info("""
+        💡 **ヒント：２回目以降の方へ**
+        
+        もし以前にキーを作成し、ブラウザのキャッシュクリア等でここの設定が消えてしまった場合は、**新しくキーを作り直す必要はありません。**
+
+        下の「APIキー作成ページ」を開くと、以前作成したキーの一覧（例: `API キー 1`）が表示されているはずです。そのキーの名前の部分をクリックすれば、キーの文字列を再度コピーできます。
+        """, icon="ℹ️")
+
         credentials_url = f"https://console.cloud.google.com/apis/credentials?project={project_id}"
         st.markdown(f'<a href="{credentials_url}" target="_blank" style="display: inline-block; padding: 12px 20px; background-color: #EA4335; color: white; text-align: center; text-decoration: none; border-radius: 5px; font-weight: bold;">🔑 APIキー作成ページを開く</a>', unsafe_allow_html=True)
 

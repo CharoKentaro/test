@@ -43,9 +43,7 @@ def show_tool():
         st.caption("新しいキーを設定したい場合は、一度削除してください。")
         return
 
-    # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-    # ★★★ ここが最終改良ポイントです！ ★★★
-    # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+    # --- ステップ0: 準備（初回のみ） ---
     st.subheader("ステップ0: 準備（初回のみ）")
     st.warning("GoogleのAPIを利用するには、最初に「請求先アカウント」の設定が必要です。")
     st.markdown("""
@@ -94,7 +92,19 @@ def show_tool():
 
         st.divider()
         st.subheader("ステップ3: APIキーを作成して完了！")
-        st.markdown("上記のAPIをすべて有効にできたら、**下のリンクを開き、「+ 認証情報を作成」 → 「APIキー」**を選択してキーを作成・コピーしてください。")
+        
+        # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+        # ★★★ ここが、ちゃろさんのアイデアを反映した最終改善箇所です！ ★★★
+        # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+        st.markdown("""
+        上記のAPIをすべて有効にできたら、いよいよ最後のステップです！<br>
+        下の**「🔑 APIキー作成ページを開く」**ボタンを押してください。
+
+        移動先のページ上部に**「+ 認証情報を作成」**が表示されています。そちらを選択すると、次に**「APIキー」**という項目が表示されますので、クリックしてください。
+        
+        自動でキーが作成されますので、表示された文字列をコピーして、下のボックスに貼り付ければ完了です！
+        """, unsafe_allow_html=True)
+        
         credentials_url = f"https://console.cloud.google.com/apis/credentials?project={project_id}"
         st.markdown(f'<a href="{credentials_url}" target="_blank" style="display: inline-block; padding: 12px 20px; background-color: #EA4335; color: white; text-align: center; text-decoration: none; border-radius: 5px; font-weight: bold;">🔑 APIキー作成ページを開く</a>', unsafe_allow_html=True)
 

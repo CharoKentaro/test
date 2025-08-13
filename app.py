@@ -9,11 +9,10 @@ from PIL import Image
 import time
 import pandas as pd
 from datetime import datetime, timedelta, timezone
-# from tools import translator_tool, calendar_tool, gijiroku_tool, kensha_no_kioku_tool, ai_memory_partner_tool
-# ↑↑↑ 一時的に他のツールをコメントアウト
 
-# ↓↓↓ 新しいツールをインポートします
+# ↓↓↓ ★1. 新しいツールを2つインポートします ★↓↓↓
 from tools import api_key_helper_tool
+from tools import gemini_api_key_helper_tool
 
 # ---------------------------------------------------------------
 # Section 1: 永続化のためのコア機能 (ここは変更なし)
@@ -34,7 +33,6 @@ def write_app_state(data):
 # ---------------------------------------------------------------
 # Section 2: お小遣い管理ツールのための補助関数 (ここは変更なし)
 # ---------------------------------------------------------------
-# (...省略... ちゃろさんの元のコードと同じ内容)
 def calculate_remaining_balance(monthly_allowance, total_spent):
     return monthly_allowance - total_spent
 
@@ -73,63 +71,49 @@ st.set_page_config(page_title="Multi-Tool Portal", page_icon="🚀", layout="wid
 if 'app_state' not in st.session_state:
     st.session_state.app_state = read_app_state()
 
-# --- サイドバー --- (ラジオボタン部分を修正)
+# --- サイドバー ---
 with st.sidebar:
     st.title("🚀 Multi-Tool Portal")
     st.divider()
     
-    # APIキー管理 (変更なし)
-    app_s_sidebar = st.session_state.app_state
-    if 'gemini_api_key' not in app_s_sidebar:
-        app_s_sidebar['gemini_api_key'] = ''
-        
-    with st.expander("⚙️ Gemini APIキーの設定", expanded=(not app_s_sidebar.get('gemini_api_key', ''))):
-        with st.form("api_key_form"):
-            api_key_input = st.text_input("Gemini APIキー", type="password", value=app_s_sidebar.get('gemini_api_key', ''))
-            col1, col2 = st.columns(2)
-            with col1: save_button = st.form_submit_button("💾 保存", use_container_width=True)
-            with col2: reset_button = st.form_submit_button("🔄 クリア", use_container_width=True)
-
-    if save_button:
-        app_s_sidebar['gemini_api_key'] = api_key_input
-        write_app_state(app_s_sidebar)
-        st.success("キーを保存しました！"); time.sleep(1); st.rerun()
-    
-    if reset_button:
-        app_s_sidebar['gemini_api_key'] = ''
-        write_app_state(app_s_sidebar)
-        st.success("キーをクリアしました。"); time.sleep(1); st.rerun()
-    
-    st.divider()
-
     # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-    # ★★★ ここを実験用に修正します ★★★
+    # ★★★ ここにあった古いGeminiキー入力フォームは、専用ツールに役割を譲り、削除しました ★★★
     # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+    
+    st.markdown("まず、利用したいツールを選択してください。")
+    
+    # ★2. ツール選択のラジオボタンを修正 ★
     st.radio(
         "利用するツールを選択してください:",
-        ("🔑 APIキー簡単設定", "💰 お小遣い管理"), # ← 実験用に選択肢を絞る
-        key="tool_selection_sidebar"
+        ("💎 Gemini APIキー簡単設定", "🔑 Maps APIキー簡単設定", "💰 お小遣い管理"),
+        key="tool_selection_sidebar",
+        label_visibility="collapsed" # ラベルは上のmarkdownに書いたので非表示に
     )
     st.divider()
-    st.markdown("""<div style="font-size: 0.9em;"><a href="https://aistudio.google.com/app/apikey" target="_blank">Gemini APIキーの取得はこちら</a></div>""", unsafe_allow_html=True)
+    
+    st.info("APIキーの設定は、各「簡単設定ツール」から行えます。")
 
 
-# --- メインコンテンツの分岐 --- (ここを修正)
+# --- メインコンテンツの分岐 ---
 api_key = st.session_state.app_state.get('gemini_api_key', '')
-
-# ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-# ★★★ メインコンテンツの分岐を実験用に修正します ★★★
-# ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
 selected_tool = st.session_state.get("tool_selection_sidebar")
 
-if selected_tool == "🔑 APIキー簡単設定":
-    api_key_helper_tool.show_tool() # 新しいツールを呼び出す
+# ★3. メインコンテンツの分岐を修正 ★
+if selected_tool == "💎 Gemini APIキー簡単設定":
+    gemini_api_key_helper_tool.show_tool()
+
+elif selected_tool == "🔑 Maps APIキー簡単設定":
+    api_key_helper_tool.show_tool()
 
 elif selected_tool == "💰 お小遣い管理":
-    # --- お小遣い管理ツールのコード --- (ここは変更なし)
     st.header("💰 お小遣い管理", divider='rainbow')
-    # (...省略... ちゃろさんの元のコードと同じ内容)
-    # --- お小遣いツールの状態管理 ---
+    
+    # --- APIキーが設定されているかチェック ---
+    if not api_key:
+        st.warning("このツールを利用するには、まず「💎 Gemini APIキー簡単設定」ツールでAPIキーを設定してください。")
+        st.stop() # キーがない場合は、ここで処理を停止
+
+    # --- お小遣い管理ツールのコード（ここから下は変更なし） ---
     okozukai_prefix = "okozukai_"
     key_allowance = f"{okozukai_prefix}monthly_allowance"
     key_total_spent = f"{okozukai_prefix}total_spent"
@@ -146,7 +130,6 @@ elif selected_tool == "💰 お小遣い管理":
     usage_limit = 5
     is_limit_reached = app_s_main.get(key_usage_count, 0) >= usage_limit
 
-    # --- UIロジックの分岐 ---
     if is_limit_reached:
         st.success("🎉 たくさんのご利用、ありがとうございます！")
         st.info("このツールが、あなたの家計管理の一助となれば幸いです。")
@@ -210,18 +193,17 @@ elif selected_tool == "💰 お小遣い管理":
         if uploaded_file:
             st.image(uploaded_file, caption="解析対象のレシート", width=300)
             if st.button("⬆️ このレシートを解析する", type="primary", use_container_width=True):
-                if not api_key: st.warning("サイドバーからGemini APIキーを設定してください。")
-                else:
-                    try:
-                        app_s_main[key_usage_count] += 1; write_app_state(app_s_main)
-                        with st.spinner("🧠 AIがレシートを解析中..."):
-                            genai.configure(api_key=api_key); model = genai.GenerativeModel('gemini-1.5-flash-latest')
-                            image = Image.open(uploaded_file); response = model.generate_content([OKOZUKAI_PROMPT, image])
-                            extracted_data = json.loads(response.text.strip().replace("```json", "").replace("```", ""))
-                        st.session_state.receipt_preview = extracted_data; st.rerun()
-                    except Exception as e:
-                        app_s_main[key_usage_count] -= 1; write_app_state(app_s_main)
-                        st.error(f"❌ 解析エラー: {e}")
+                # ここにあったAPIキーチェックは、関数の冒頭に移動したので不要
+                try:
+                    app_s_main[key_usage_count] += 1; write_app_state(app_s_main)
+                    with st.spinner("🧠 AIがレシートを解析中..."):
+                        genai.configure(api_key=api_key); model = genai.GenerativeModel('gemini-1.5-flash-latest')
+                        image = Image.open(uploaded_file); response = model.generate_content([OKOZUKAI_PROMPT, image])
+                        extracted_data = json.loads(response.text.strip().replace("```json", "").replace("```", ""))
+                    st.session_state.receipt_preview = extracted_data; st.rerun()
+                except Exception as e:
+                    app_s_main[key_usage_count] -= 1; write_app_state(app_s_main)
+                    st.error(f"❌ 解析エラー: {e}")
         
         st.divider()
         st.subheader("📜 支出履歴とデータ管理")
@@ -253,8 +235,3 @@ elif selected_tool == "💰 お小遣い管理":
         if c2_reset.button("⚠️ 全データ完全初期化", use_container_width=True, help="予算設定も含め、このツールの全データを消去します。", type="secondary"):
             app_s_main[key_allowance] = 0.0; app_s_main[key_total_spent] = 0.0; app_s_main[key_all_receipts] = []; app_s_main[key_usage_count] = 0
             write_app_state(app_s_main); st.success("全データをリセットしました！"); time.sleep(1); st.rerun()
-
-# --- 他のツールの呼び出し (一時的にコメントアウト) ---
-# elif st.session_state.get("tool_selection_sidebar") == "🤝 翻訳ツール":
-#     translator_tool.show_tool(gemini_api_key=api_key)
-# ... (以下同様にコメントアウト)
